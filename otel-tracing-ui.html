@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OtelTrace — OpenTelemetry Tracing</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root, [data-theme="dark"] {
+  --bg: #0e0e1a;
+  --surface: #13132a;
+  --surface2: #1a1a35;
+  --surface3: #21213d;
+  --sidebar: #0b0b1c;
+  --border: rgba(255,255,255,0.06);
+  --border2: rgba(255,255,255,0.11);
+  --text: #e4e4f0;
+  --text2: #8888aa;
+  --text3: #555578;
+  --accent: #7c5cbf;
+  --accent-glow: rgba(124,92,191,0.3);
+  --green: #3ecf8e;
+  --yellow: #f5a623;
+  --red: #e74c3c;
+  --blue: #4a9eff;
+  --purple: #a855f7;
+  --pink: #ec4899;
+  --orange: #fb923c;
+  --cyan: #22d3ee;
+  --radius: 10px;
+  --card-shadow: 0 2px 16px rgba(0,0,0,0.5);
+  --input-bg: rgba(255,255,255,0.04);
+  --hover-bg: rgba(255,255,255,0.045);
+  --scrollbar: rgba(255,255,255,0.08);
+  --mono: 'JetBrains Mono', monospace;
+}
+
+[data-theme="light"] {
+  --bg: #f0f2f8;
+  --surface: #ffffff;
+  --surface2: #eef0f7;
+  --surface3: #e6e8f2;
+  --sidebar: #ffffff;
+  --border: rgba(0,0,0,0.06);
+  --border2: rgba(0,0,0,0.11);
+  --text: #18182e;
+  --text2: #5a5a7a;
+  --text3: #9898b8;
+  --accent: #7c5cbf;
+  --accent-glow: rgba(124,92,191,0.18);
+  --green: #0fa968;
+  --yellow: #d4880a;
+  --red: #d63428;
+  --blue: #2a7de1;
+  --purple: #8b3fdb;
+  --pink: #d63384;
+  --orange: #ea6c14;
+  --cyan: #0891b2;
+  --card-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  --input-bg: rgba(0,0,0,0.03);
+  --hover-bg: rgba(0,0,0,0.035);
+  --scrollbar: rgba(0,0,0,0.1);
+}
+
+html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); font-size: 13px; overflow: hidden; transition: background 0.2s, color 0.2s; }
+#app { display: flex; height: 100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width: 220px; min-width: 220px; background: var(--sidebar);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  transition: width 0.26s cubic-bezier(.4,0,.2,1), min-width 0.26s cubic-bezier(.4,0,.2,1);
+  flex-shrink: 0; overflow: hidden;
+}
+.sidebar.collapsed { width: 56px; min-width: 56px; }
+
+.sidebar-logo {
+  display: flex; align-items: center; gap: 9px;
+  padding: 15px 13px 13px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.logo-icon {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: linear-gradient(135deg, #7c5cbf, #4a9eff);
+  display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0;
+}
+.sidebar-logo-text-wrap {
+  display: flex; flex-direction: column; overflow: hidden;
+  transition: opacity 0.18s, transform 0.18s;
+}
+.sidebar.collapsed .sidebar-logo-text-wrap { opacity: 0; transform: translateX(-6px); pointer-events: none; }
+.logo-name { font-size: 13px; font-weight: 700; color: var(--text); }
+.logo-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
+
+.sidebar-toggle {
+  width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border2);
+  background: var(--hover-bg); color: var(--text2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; flex-shrink: 0; transition: all 0.15s; margin-left: auto;
+}
+.sidebar-toggle:hover { background: rgba(124,92,191,0.15); color: var(--accent); border-color: var(--accent); }
+.sidebar.collapsed .sidebar-toggle { margin: 0 auto; }
+
+.sidebar-section { padding: 12px 8px 4px; }
+.sidebar-section-label {
+  font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase;
+  letter-spacing: 1px; padding: 0 6px 6px; white-space: nowrap;
+  transition: opacity 0.15s, height 0.2s;
+}
+.sidebar.collapsed .sidebar-section-label { opacity: 0; height: 0; padding: 0; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+  border-radius: 7px; cursor: pointer; transition: all 0.15s; color: var(--text2);
+  font-size: 12.5px; font-weight: 500; white-space: nowrap; position: relative;
+}
+.nav-item:hover { background: var(--hover-bg); color: var(--text); }
+.nav-item.active { background: rgba(124,92,191,0.15); color: var(--accent); }
+.nav-item .icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+.nav-label { transition: opacity 0.15s, max-width 0.22s; max-width: 160px; }
+.sidebar.collapsed .nav-label { opacity: 0; max-width: 0; overflow: hidden; }
+.nav-badge {
+  margin-left: auto; font-size: 10px; font-weight: 700; min-width: 18px; height: 18px;
+  border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  padding: 0 5px; flex-shrink: 0; transition: opacity 0.15s;
+}
+.sidebar.collapsed .nav-badge { opacity: 0; width: 0; min-width: 0; padding: 0; overflow: hidden; }
+.nb-red { background: rgba(231,76,60,0.2); color: var(--red); }
+.nb-blue { background: rgba(74,158,255,0.15); color: var(--blue); }
+.nb-green { background: rgba(62,207,142,0.15); color: var(--green); }
+
+.sidebar-bottom {
+  margin-top: auto; padding: 10px 8px; border-top: 1px solid var(--border);
+}
+.user-card {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px;
+  border-radius: 7px; cursor: pointer; transition: background 0.15s;
+}
+.user-card:hover { background: var(--hover-bg); }
+.user-av {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, #7c5cbf, #ec4899);
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff;
+}
+.user-info { overflow: hidden; transition: opacity 0.15s, max-width 0.22s; max-width: 140px; }
+.sidebar.collapsed .user-info { opacity: 0; max-width: 0; }
+.user-name { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.user-role { font-size: 10px; color: var(--text3); white-space: nowrap; }
+
+/* ── MAIN ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* ── HEADER ── */
+.header {
+  height: 52px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 16px; gap: 10px;
+  background: var(--surface); flex-shrink: 0;
+}
+.hamburger {
+  width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--border2);
+  background: transparent; color: var(--text2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+}
+.hamburger:hover { background: var(--hover-bg); color: var(--text); }
+.header-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text2); }
+.header-breadcrumb strong { color: var(--text); font-weight: 600; }
+.header-breadcrumb .sep { color: var(--text3); }
+.header-spacer { flex: 1; }
+
+.hdr-btn {
+  display: flex; align-items: center; gap: 5px; padding: 5px 11px;
+  border-radius: 7px; border: 1px solid var(--border2); background: var(--surface2);
+  color: var(--text2); font-size: 11.5px; font-weight: 500; cursor: pointer;
+  transition: all 0.15s; font-family: 'Inter', sans-serif; white-space: nowrap;
+}
+.hdr-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(124,92,191,0.08); }
+.hdr-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.hdr-btn.primary:hover { background: #6a4aad; border-color: #6a4aad; color: #fff; }
+
+.theme-toggle {
+  display: flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border-radius: 20px; cursor: pointer; border: 1px solid var(--border2);
+  background: var(--surface2); color: var(--text2); font-size: 11.5px; font-weight: 600;
+  font-family: 'Inter', sans-serif; transition: all 0.2s; white-space: nowrap;
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.toggle-track {
+  width: 30px; height: 17px; border-radius: 9px; position: relative;
+  background: var(--border2); transition: background 0.25s; flex-shrink: 0;
+}
+[data-theme="light"] .toggle-track { background: var(--accent); }
+.toggle-thumb {
+  position: absolute; top: 2px; left: 2px; width: 13px; height: 13px;
+  border-radius: 50%; background: #fff; transition: transform 0.25s cubic-bezier(.34,1.56,.64,1);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+[data-theme="light"] .toggle-thumb { transform: translateX(13px); }
+
+/* ── TOOLBAR ── */
+.toolbar {
+  display: flex; align-items: center; gap: 8px; padding: 9px 16px;
+  border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
+}
+.time-range-group { display: flex; align-items: center; gap: 2px; }
+.tr-btn {
+  padding: 5px 10px; border-radius: 6px; font-size: 11.5px; font-weight: 500;
+  cursor: pointer; border: 1px solid transparent; background: transparent;
+  color: var(--text2); font-family: 'Inter', sans-serif; transition: all 0.15s;
+}
+.tr-btn:hover { background: var(--hover-bg); color: var(--text); }
+.tr-btn.active { background: rgba(124,92,191,0.15); color: var(--accent); border-color: rgba(124,92,191,0.25); }
+
+.tb-sep { width: 1px; height: 20px; background: var(--border2); margin: 0 4px; }
+
+.search-bar {
+  display: flex; align-items: center; gap: 7px; padding: 5px 10px;
+  background: var(--input-bg); border: 1px solid var(--border2); border-radius: 7px;
+  min-width: 260px;
+}
+.search-bar input {
+  background: none; border: none; outline: none; color: var(--text);
+  font-family: 'Inter', sans-serif; font-size: 12.5px; flex: 1; min-width: 0;
+}
+.search-bar input::placeholder { color: var(--text3); }
+.search-icon { color: var(--text3); font-size: 13px; }
+
+.filter-chip {
+  display: flex; align-items: center; gap: 5px; padding: 4px 9px;
+  border-radius: 6px; font-size: 11.5px; font-weight: 500; cursor: pointer;
+  border: 1px solid var(--border2); background: var(--input-bg); color: var(--text2);
+  font-family: 'Inter', sans-serif; transition: all 0.15s; white-space: nowrap;
+}
+.filter-chip:hover { border-color: var(--border2); background: var(--hover-bg); color: var(--text); }
+.filter-chip.active { background: rgba(124,92,191,0.12); border-color: rgba(124,92,191,0.3); color: var(--accent); }
+.filter-chip select {
+  background: none; border: none; outline: none; color: inherit;
+  font-family: inherit; font-size: inherit; cursor: pointer;
+}
+
+.tb-spacer { flex: 1; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; animation: pulse-dot 2s infinite; }
+@keyframes pulse-dot { 0%,100% { box-shadow: 0 0 0 0 rgba(62,207,142,0.5); } 50% { box-shadow: 0 0 0 5px rgba(62,207,142,0); } }
+
+/* ── CONTENT LAYOUT ── */
+.content { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+/* ── TRACE LIST ── */
+.trace-list-panel {
+  width: 460px; min-width: 340px; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; flex-shrink: 0;
+}
+.panel-header {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.panel-title { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; }
+.panel-count { font-size: 11px; color: var(--text3); background: var(--surface3); padding: 2px 7px; border-radius: 10px; }
+
+.trace-list { flex: 1; overflow-y: auto; }
+.trace-list::-webkit-scrollbar { width: 4px; }
+.trace-list::-webkit-scrollbar-track { background: transparent; }
+.trace-list::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
+
+.trace-item {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.12s; position: relative;
+}
+.trace-item:hover { background: var(--hover-bg); }
+.trace-item.active { background: rgba(124,92,191,0.08); border-left: 2px solid var(--accent); padding-left: 12px; }
+.trace-item.active::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+
+.ti-top { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+.ti-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ti-name { font-size: 12.5px; font-weight: 600; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ti-dur { font-family: var(--mono); font-size: 11px; color: var(--text2); flex-shrink: 0; }
+.ti-dur.slow { color: var(--yellow); }
+.ti-dur.error { color: var(--red); }
+
+.ti-mid { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.ti-service {
+  font-size: 10.5px; font-weight: 500; padding: 2px 6px; border-radius: 4px;
+  background: rgba(74,158,255,0.12); color: var(--blue);
+}
+.ti-method {
+  font-size: 10.5px; font-weight: 600; padding: 2px 6px; border-radius: 4px; font-family: var(--mono);
+}
+.method-GET { background: rgba(62,207,142,0.12); color: var(--green); }
+.method-POST { background: rgba(74,158,255,0.12); color: var(--blue); }
+.method-PUT { background: rgba(245,166,35,0.12); color: var(--yellow); }
+.method-DELETE { background: rgba(231,76,60,0.12); color: var(--red); }
+.method-PATCH { background: rgba(168,85,247,0.12); color: var(--purple); }
+.ti-status-code {
+  font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-family: var(--mono);
+}
+.sc-2xx { background: rgba(62,207,142,0.12); color: var(--green); }
+.sc-4xx { background: rgba(245,166,35,0.12); color: var(--yellow); }
+.sc-5xx { background: rgba(231,76,60,0.15); color: var(--red); }
+
+.ti-bot { display: flex; align-items: center; gap: 10px; }
+.ti-spans { font-size: 10.5px; color: var(--text3); }
+.ti-time { font-size: 10.5px; color: var(--text3); margin-left: auto; }
+.ti-path { font-size: 11px; color: var(--text2); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+
+/* mini waterfall */
+.ti-waterfall { margin-top: 6px; height: 4px; background: var(--surface3); border-radius: 2px; overflow: hidden; }
+.ti-wf-bar { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+/* ── TRACE DETAIL ── */
+.trace-detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+.detail-tabs {
+  display: flex; align-items: center; gap: 2px; padding: 0 16px;
+  border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
+}
+.detail-tab {
+  padding: 11px 12px; font-size: 12px; font-weight: 500; color: var(--text2);
+  cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s;
+  white-space: nowrap;
+}
+.detail-tab:hover { color: var(--text); }
+.detail-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.detail-body { flex: 1; overflow-y: auto; padding: 16px; }
+.detail-body::-webkit-scrollbar { width: 4px; }
+.detail-body::-webkit-scrollbar-track { background: transparent; }
+.detail-body::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 2px; }
+
+/* ── TRACE OVERVIEW ── */
+.trace-overview-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; margin-bottom: 14px;
+}
+.toc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.toc-name { font-size: 14px; font-weight: 700; color: var(--text); flex: 1; }
+.toc-id { font-size: 10.5px; color: var(--text3); font-family: var(--mono); }
+.toc-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.toc-metric { display: flex; flex-direction: column; gap: 3px; }
+.toc-metric-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.toc-metric-value { font-size: 16px; font-weight: 700; font-family: var(--mono); }
+.toc-metric-sub { font-size: 10px; color: var(--text3); }
+
+/* ── WATERFALL ── */
+.waterfall-container {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; margin-bottom: 14px;
+}
+.wf-header-row {
+  display: flex; align-items: center; padding: 8px 12px;
+  border-bottom: 1px solid var(--border); background: var(--surface2);
+}
+.wf-name-col { width: 280px; flex-shrink: 0; font-size: 10.5px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.wf-bar-col { flex: 1; display: flex; align-items: center; }
+.wf-timeline { flex: 1; display: flex; }
+.wf-tick { flex: 1; font-size: 10px; color: var(--text3); font-family: var(--mono); }
+
+.wf-row {
+  display: flex; align-items: center; padding: 5px 12px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.12s; min-height: 32px;
+}
+.wf-row:last-child { border-bottom: none; }
+.wf-row:hover { background: var(--hover-bg); }
+.wf-row.active { background: rgba(124,92,191,0.07); }
+.wf-row.error-row { background: rgba(231,76,60,0.04); }
+
+.wf-name-cell {
+  width: 280px; flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+  overflow: hidden;
+}
+.wf-indent { flex-shrink: 0; }
+.wf-span-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.wf-span-name { font-size: 11.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.wf-span-svc { font-size: 10px; color: var(--text3); flex-shrink: 0; }
+
+.wf-bar-cell { flex: 1; position: relative; height: 18px; }
+.wf-bar {
+  position: absolute; height: 14px; top: 2px; border-radius: 3px;
+  display: flex; align-items: center; overflow: hidden; min-width: 2px;
+  transition: all 0.2s;
+}
+.wf-bar:hover { filter: brightness(1.2); }
+.wf-bar-label { font-size: 9.5px; font-family: var(--mono); color: rgba(255,255,255,0.8); padding: 0 4px; white-space: nowrap; overflow: hidden; }
+.wf-dur { font-size: 10.5px; color: var(--text3); font-family: var(--mono); flex-shrink: 0; margin-left: 6px; min-width: 45px; text-align: right; }
+
+/* ── SPAN ATTRIBUTES ── */
+.attr-section { margin-bottom: 14px; }
+.attr-section-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.attr-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.attr-grid { display: flex; flex-direction: column; gap: 4px; }
+.attr-row {
+  display: flex; align-items: flex-start; gap: 10px; padding: 5px 8px;
+  background: var(--input-bg); border-radius: 6px; font-size: 11.5px;
+}
+.attr-key { font-family: var(--mono); color: var(--text2); min-width: 180px; flex-shrink: 0; font-size: 11px; }
+.attr-val { font-family: var(--mono); color: var(--text); word-break: break-all; }
+.attr-val.err { color: var(--red); }
+.attr-val.ok { color: var(--green); }
+
+/* ── LOGS VIEW ── */
+.log-entry {
+  display: flex; align-items: flex-start; gap: 10px; padding: 7px 10px;
+  border-radius: 7px; margin-bottom: 4px; font-family: var(--mono); font-size: 11.5px;
+  border-left: 3px solid transparent;
+}
+.log-entry.INFO { background: rgba(74,158,255,0.05); border-left-color: var(--blue); }
+.log-entry.WARN { background: rgba(245,166,35,0.05); border-left-color: var(--yellow); }
+.log-entry.ERROR { background: rgba(231,76,60,0.07); border-left-color: var(--red); }
+.log-entry.DEBUG { background: var(--input-bg); border-left-color: var(--text3); }
+.log-level { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; min-width: 44px; text-align: center; }
+.ll-INFO { background: rgba(74,158,255,0.15); color: var(--blue); }
+.ll-WARN { background: rgba(245,166,35,0.15); color: var(--yellow); }
+.ll-ERROR { background: rgba(231,76,60,0.18); color: var(--red); }
+.ll-DEBUG { background: var(--surface3); color: var(--text3); }
+.log-time { color: var(--text3); font-size: 10.5px; flex-shrink: 0; }
+.log-msg { color: var(--text); flex: 1; }
+.log-span { color: var(--accent); font-size: 10.5px; flex-shrink: 0; }
+
+/* ── EVENTS ── */
+.event-row {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.event-row:last-child { border-bottom: none; }
+.ev-icon { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+.ev-name { font-size: 12px; font-weight: 500; color: var(--text); flex: 1; }
+.ev-time { font-size: 10.5px; color: var(--text3); font-family: var(--mono); }
+.ev-attrs { font-size: 10.5px; color: var(--text2); font-family: var(--mono); }
+
+/* ── METRICS MINI ── */
+.metrics-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.metric-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px;
+}
+.mc-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.mc-value { font-size: 20px; font-weight: 700; font-family: var(--mono); }
+.mc-bar { height: 3px; background: var(--surface3); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.mc-bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; gap: 12px; color: var(--text3);
+}
+.empty-icon { font-size: 40px; opacity: 0.4; }
+.empty-text { font-size: 13px; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; bottom: 20px; right: 20px; padding: 10px 16px;
+  border-radius: 9px; display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 500; z-index: 1000;
+  animation: toast-in 0.25s cubic-bezier(.34,1.56,.64,1);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+@keyframes toast-in { from { transform: translateY(12px) scale(0.96); opacity: 0; } to { transform: none; opacity: 1; } }
+.toast.success { background: rgba(62,207,142,0.15); border: 1px solid rgba(62,207,142,0.3); color: var(--green); }
+.toast.error { background: rgba(231,76,60,0.15); border: 1px solid rgba(231,76,60,0.3); color: var(--red); }
+.toast.info { background: rgba(74,158,255,0.12); border: 1px solid rgba(74,158,255,0.25); color: var(--blue); }
+
+/* ── LOADING ── */
+.loading-overlay { display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; gap: 14px; }
+.spinner { width: 36px; height: 36px; border-radius: 50%; border: 3px solid var(--border2); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── SERVICE MAP (simple) ── */
+.svc-map { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+.svc-map-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.svc-nodes { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+.svc-node {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 10px 14px; background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 8px; min-width: 90px; cursor: pointer; transition: all 0.15s;
+}
+.svc-node:hover { border-color: var(--accent); background: rgba(124,92,191,0.08); }
+.svc-node.active { border-color: var(--accent); background: rgba(124,92,191,0.12); }
+.svc-icon { font-size: 18px; }
+.svc-name { font-size: 10.5px; font-weight: 600; color: var(--text); }
+.svc-latency { font-size: 9.5px; color: var(--text3); font-family: var(--mono); }
+.svc-arrow { color: var(--text3); font-size: 16px; margin: 0 4px; flex-shrink: 0; }
+
+.tag { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10.5px; font-weight: 500; }
+.tag-error { background: rgba(231,76,60,0.15); color: var(--red); }
+.tag-warn { background: rgba(245,166,35,0.12); color: var(--yellow); }
+.tag-ok { background: rgba(62,207,142,0.12); color: var(--green); }
+
+/* scrollbar global */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <template v-if="!loading">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" :class="{collapsed: sidebarCollapsed}">
+      <div class="sidebar-logo">
+        <div class="logo-icon">🔭</div>
+        <div class="sidebar-logo-text-wrap">
+          <span class="logo-name">OtelTrace</span>
+          <span class="logo-sub">Distributed Tracing</span>
+        </div>
+        <button class="sidebar-toggle" @click="sidebarCollapsed=!sidebarCollapsed">{{ sidebarCollapsed ? '›' : '‹' }}</button>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Observability</div>
+        <div class="nav-item" :class="{active: nav==='traces'}" @click="nav='traces'">
+          <span class="icon">📡</span>
+          <span class="nav-label">Traces</span>
+          <span class="nav-badge nb-blue">{{ traces.length }}</span>
+        </div>
+        <div class="nav-item" :class="{active: nav==='services'}" @click="nav='services'">
+          <span class="icon">🕸️</span>
+          <span class="nav-label">Service Map</span>
+        </div>
+        <div class="nav-item" :class="{active: nav==='metrics'}" @click="nav='metrics'">
+          <span class="icon">📊</span>
+          <span class="nav-label">Metrics</span>
+        </div>
+        <div class="nav-item" :class="{active: nav==='logs'}" @click="nav='logs'">
+          <span class="icon">📋</span>
+          <span class="nav-label">Logs</span>
+          <span class="nav-badge nb-red">{{ errorLogs }}</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-section-label">Config</div>
+        <div class="nav-item" :class="{active: nav==='collectors'}" @click="nav='collectors'">
+          <span class="icon">⚙️</span>
+          <span class="nav-label">Collectors</span>
+          <span class="nav-badge nb-green">3</span>
+        </div>
+        <div class="nav-item" :class="{active: nav==='alerts'}" @click="nav='alerts'">
+          <span class="icon">🔔</span>
+          <span class="nav-label">Alerts</span>
+          <span class="nav-badge nb-red">2</span>
+        </div>
+        <div class="nav-item" :class="{active: nav==='settings'}" @click="nav='settings'">
+          <span class="icon">🛠️</span>
+          <span class="nav-label">Settings</span>
+        </div>
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="user-card">
+          <div class="user-av">OA</div>
+          <div class="user-info">
+            <div class="user-name">Ops Admin</div>
+            <div class="user-role">SRE · Platform Team</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <div class="main">
+      <!-- HEADER -->
+      <div class="header">
+        <button class="hamburger" @click="sidebarCollapsed=!sidebarCollapsed">☰</button>
+        <div class="header-breadcrumb">
+          <span>OtelTrace</span>
+          <span class="sep">/</span>
+          <strong>{{ navLabels[nav] }}</strong>
+        </div>
+        <div class="header-spacer"></div>
+        <div style="display:flex;align-items:center;gap:6px;margin-right:4px;">
+          <div class="live-dot"></div>
+          <span style="font-size:11px;color:var(--green);font-weight:600;">Live</span>
+        </div>
+        <button class="hdr-btn" @click="refreshTraces">⟳ Refresh</button>
+        <button class="hdr-btn primary" @click="showToast('Exporting traces...', '📤', 'info')">↑ Export</button>
+        <button class="theme-toggle" @click="toggleTheme">
+          <div class="toggle-track"><div class="toggle-thumb"></div></div>
+          <span>{{ isDark ? 'Dark' : 'Light' }}</span>
+        </button>
+      </div>
+
+      <!-- TRACES VIEW -->
+      <template v-if="nav==='traces'">
+        <!-- TOOLBAR -->
+        <div class="toolbar">
+          <div class="time-range-group">
+            <button v-for="t in timeRanges" :key="t" class="tr-btn" :class="{active: activeTimeRange===t}" @click="activeTimeRange=t">{{ t }}</button>
+          </div>
+          <div class="tb-sep"></div>
+          <div class="search-bar">
+            <span class="search-icon">🔍</span>
+            <input v-model="searchQuery" placeholder="Search service, trace ID, endpoint..." />
+          </div>
+          <div class="filter-chip" :class="{active: filterStatus!=='all'}" style="cursor:default">
+            <span>Status</span>
+            <select v-model="filterStatus">
+              <option value="all">All</option>
+              <option value="ok">OK</option>
+              <option value="error">Error</option>
+              <option value="slow">Slow</option>
+            </select>
+          </div>
+          <div class="filter-chip" :class="{active: filterService!=='all'}" style="cursor:default">
+            <span>Service</span>
+            <select v-model="filterService">
+              <option value="all">All</option>
+              <option v-for="s in serviceList" :key="s" :value="s">{{ s }}</option>
+            </select>
+          </div>
+          <div class="tb-spacer"></div>
+          <span style="font-size:11px;color:var(--text3)">{{ filteredTraces.length }} traces</span>
+        </div>
+
+        <!-- CONTENT: list + detail -->
+        <div class="content">
+          <!-- TRACE LIST -->
+          <div class="trace-list-panel">
+            <div class="panel-header">
+              <span class="panel-title">Traces</span>
+              <span class="panel-count">{{ filteredTraces.length }}</span>
+            </div>
+            <div class="trace-list">
+              <div v-for="trace in filteredTraces" :key="trace.id"
+                   class="trace-item"
+                   :class="{active: activeTrace && activeTrace.id===trace.id}"
+                   @click="selectTrace(trace)">
+                <div class="ti-top">
+                  <div class="ti-status" :style="{background: statusColor(trace.status)}"></div>
+                  <span class="ti-name">{{ trace.rootSpan }}</span>
+                  <span class="ti-dur" :class="trace.status">{{ trace.duration }}</span>
+                </div>
+                <div class="ti-mid">
+                  <span class="ti-service">{{ trace.service }}</span>
+                  <span class="ti-method" :class="'method-'+trace.method">{{ trace.method }}</span>
+                  <span class="ti-status-code" :class="statusCodeClass(trace.statusCode)">{{ trace.statusCode }}</span>
+                  <span class="ti-path">{{ trace.path }}</span>
+                </div>
+                <div class="ti-bot">
+                  <span class="ti-spans">{{ trace.spans }} spans</span>
+                  <span class="ti-time">{{ trace.time }}</span>
+                </div>
+                <div class="ti-waterfall">
+                  <div class="ti-wf-bar" :style="{width: trace.wfWidth+'%', background: statusColor(trace.status)+'88'}"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TRACE DETAIL -->
+          <div class="trace-detail" v-if="activeTrace">
+            <div class="detail-tabs">
+              <div v-for="t in detailTabs" :key="t.id" class="detail-tab" :class="{active: activeDetailTab===t.id}" @click="activeDetailTab=t.id">
+                {{ t.label }}
+              </div>
+            </div>
+            <div class="detail-body">
+
+              <!-- TAB: WATERFALL -->
+              <template v-if="activeDetailTab==='waterfall'">
+                <!-- Overview card -->
+                <div class="trace-overview-card">
+                  <div class="toc-header">
+                    <span class="toc-name">{{ activeTrace.rootSpan }}</span>
+                    <span class="tag" :class="activeTrace.status==='error'?'tag-error':activeTrace.status==='slow'?'tag-warn':'tag-ok'">{{ activeTrace.status.toUpperCase() }}</span>
+                    <span class="toc-id">{{ activeTrace.id }}</span>
+                  </div>
+                  <div class="toc-metrics">
+                    <div class="toc-metric">
+                      <span class="toc-metric-label">Duration</span>
+                      <span class="toc-metric-value" :style="{color: activeTrace.status==='error'?'var(--red)':activeTrace.status==='slow'?'var(--yellow)':'var(--green)'}">{{ activeTrace.duration }}</span>
+                      <span class="toc-metric-sub">Total trace time</span>
+                    </div>
+                    <div class="toc-metric">
+                      <span class="toc-metric-label">Spans</span>
+                      <span class="toc-metric-value" style="color:var(--blue)">{{ activeTrace.spans }}</span>
+                      <span class="toc-metric-sub">{{ activeTrace.errorSpans || 0 }} errors</span>
+                    </div>
+                    <div class="toc-metric">
+                      <span class="toc-metric-label">Services</span>
+                      <span class="toc-metric-value" style="color:var(--purple)">{{ activeTrace.serviceCount || 3 }}</span>
+                      <span class="toc-metric-sub">Involved</span>
+                    </div>
+                    <div class="toc-metric">
+                      <span class="toc-metric-label">Status</span>
+                      <span class="toc-metric-value" style="font-size:14px">{{ activeTrace.statusCode }}</span>
+                      <span class="toc-metric-sub">HTTP Status</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Service map mini -->
+                <div class="svc-map">
+                  <div class="svc-map-title">📡 Service Dependency</div>
+                  <div class="svc-nodes">
+                    <template v-for="(node, idx) in activeTrace.serviceNodes" :key="node.name">
+                      <div class="svc-node" :class="{active: hoveredSvc===node.name}" @mouseenter="hoveredSvc=node.name" @mouseleave="hoveredSvc=null">
+                        <span class="svc-icon">{{ node.icon }}</span>
+                        <span class="svc-name">{{ node.name }}</span>
+                        <span class="svc-latency">{{ node.latency }}</span>
+                      </div>
+                      <span v-if="idx < activeTrace.serviceNodes.length-1" class="svc-arrow">→</span>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- Waterfall -->
+                <div class="waterfall-container">
+                  <div class="wf-header-row">
+                    <div class="wf-name-col">Span Name</div>
+                    <div class="wf-bar-col">
+                      <div class="wf-timeline">
+                        <span class="wf-tick">0ms</span>
+                        <span class="wf-tick" style="text-align:center">{{ halfDur(activeTrace.duration) }}</span>
+                        <span class="wf-tick" style="text-align:right">{{ activeTrace.duration }}</span>
+                      </div>
+                    </div>
+                    <div style="width:52px; font-size:10.5px; color:var(--text3); text-align:right">Duration</div>
+                  </div>
+                  <div v-for="span in activeTrace.spanTree" :key="span.id"
+                       class="wf-row"
+                       :class="{active: activeSpan && activeSpan.id===span.id, 'error-row': span.status==='error'}"
+                       @click="activeSpan = activeSpan?.id===span.id ? null : span">
+                    <div class="wf-name-cell">
+                      <div class="wf-indent" :style="{width: span.depth*16+'px'}"></div>
+                      <div class="wf-span-dot" :style="{background: span.color}"></div>
+                      <span class="wf-span-name" :title="span.name">{{ span.name }}</span>
+                      <span class="wf-span-svc">{{ span.service }}</span>
+                    </div>
+                    <div class="wf-bar-cell">
+                      <div class="wf-bar"
+                           :style="{left: span.offsetPct+'%', width: Math.max(span.widthPct, 0.5)+'%', background: span.color+'bb'}">
+                        <span class="wf-bar-label">{{ span.duration }}</span>
+                      </div>
+                    </div>
+                    <div class="wf-dur">{{ span.duration }}</div>
+                  </div>
+                </div>
+
+                <!-- Active span attrs -->
+                <template v-if="activeSpan">
+                  <div class="trace-overview-card">
+                    <div class="toc-header">
+                      <span class="toc-name" style="font-size:13px">{{ activeSpan.name }}</span>
+                      <span class="tag" :class="activeSpan.status==='error'?'tag-error':'tag-ok'">{{ activeSpan.status.toUpperCase() }}</span>
+                    </div>
+                    <div class="attr-section">
+                      <div class="attr-section-title">Span Attributes</div>
+                      <div class="attr-grid">
+                        <div class="attr-row" v-for="a in activeSpan.attrs" :key="a.key">
+                          <span class="attr-key">{{ a.key }}</span>
+                          <span class="attr-val" :class="{err: a.err, ok: a.ok}">{{ a.val }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </template>
+
+              <!-- TAB: LOGS -->
+              <template v-if="activeDetailTab==='logs'">
+                <div class="attr-section-title" style="margin-bottom:10px">Trace Logs</div>
+                <div v-for="log in activeTrace.logs" :key="log.id" class="log-entry" :class="log.level">
+                  <span class="log-level" :class="'ll-'+log.level">{{ log.level }}</span>
+                  <span class="log-time">{{ log.time }}</span>
+                  <span class="log-msg">{{ log.msg }}</span>
+                  <span class="log-span">{{ log.span }}</span>
+                </div>
+              </template>
+
+              <!-- TAB: EVENTS -->
+              <template v-if="activeDetailTab==='events'">
+                <div class="trace-overview-card">
+                  <div class="attr-section-title" style="margin-bottom:10px">Span Events</div>
+                  <div v-for="ev in activeTrace.events" :key="ev.id" class="event-row">
+                    <div class="ev-icon" :style="{background: ev.color+'18'}">{{ ev.icon }}</div>
+                    <div style="flex:1">
+                      <div class="ev-name">{{ ev.name }}</div>
+                      <div class="ev-attrs">{{ ev.attrs }}</div>
+                    </div>
+                    <div class="ev-time">+{{ ev.offset }}</div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- TAB: ATTRIBUTES -->
+              <template v-if="activeDetailTab==='attributes'">
+                <div class="attr-section">
+                  <div class="attr-section-title">HTTP Attributes</div>
+                  <div class="attr-grid">
+                    <div class="attr-row" v-for="a in activeTrace.httpAttrs" :key="a.key">
+                      <span class="attr-key">{{ a.key }}</span>
+                      <span class="attr-val" :class="{err: a.err, ok: a.ok}">{{ a.val }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="attr-section">
+                  <div class="attr-section-title">Resource Attributes</div>
+                  <div class="attr-grid">
+                    <div class="attr-row" v-for="a in activeTrace.resourceAttrs" :key="a.key">
+                      <span class="attr-key">{{ a.key }}</span>
+                      <span class="attr-val">{{ a.val }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+            </div>
+          </div>
+          <!-- no trace selected -->
+          <div class="trace-detail" v-else>
+            <div class="empty-state">
+              <div class="empty-icon">🔭</div>
+              <div class="empty-text">Select a trace to inspect</div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- SERVICE MAP VIEW -->
+      <template v-if="nav==='services'">
+        <div class="content" style="padding:20px;overflow:auto;flex-direction:column">
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:16px">Service Dependency Map</div>
+          <div class="svc-map" style="max-width:900px">
+            <div class="svc-nodes" style="gap:12px;flex-wrap:wrap">
+              <template v-for="(node,idx) in serviceMap" :key="node.name">
+                <div class="svc-node" style="padding:14px 18px">
+                  <span class="svc-icon" style="font-size:22px">{{ node.icon }}</span>
+                  <span class="svc-name" style="font-size:11.5px">{{ node.name }}</span>
+                  <span class="svc-latency">p99: {{ node.latency }}</span>
+                  <span class="tag" :class="node.status==='ok'?'tag-ok':'tag-error'" style="margin-top:4px">{{ node.status.toUpperCase() }}</span>
+                </div>
+                <span v-if="idx < serviceMap.length-1" class="svc-arrow" style="font-size:20px">→</span>
+              </template>
+            </div>
+          </div>
+          <div class="metrics-row" style="max-width:900px;margin-top:16px">
+            <div v-for="m in svcMetrics" :key="m.label" class="metric-card">
+              <div class="mc-label">{{ m.label }}</div>
+              <div class="mc-value" :style="{color: m.color}">{{ m.value }}</div>
+              <div class="mc-bar"><div class="mc-bar-fill" :style="{width: m.pct+'%', background: m.color}"></div></div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- LOGS VIEW -->
+      <template v-if="nav==='logs'">
+        <div class="toolbar">
+          <div class="search-bar">
+            <span class="search-icon">🔍</span>
+            <input v-model="logSearch" placeholder="Filter logs..." />
+          </div>
+          <div class="filter-chip" style="cursor:default">
+            <select v-model="logLevel" style="background:none;border:none;outline:none;color:var(--text2);font-family:inherit;font-size:inherit;cursor:pointer">
+              <option value="all">All Levels</option>
+              <option value="ERROR">ERROR</option>
+              <option value="WARN">WARN</option>
+              <option value="INFO">INFO</option>
+              <option value="DEBUG">DEBUG</option>
+            </select>
+          </div>
+          <div class="tb-spacer"></div>
+          <span style="font-size:11px;color:var(--text3)">{{ filteredLogs.length }} entries</span>
+        </div>
+        <div class="detail-body" style="padding:16px;overflow-y:auto">
+          <div v-for="log in filteredLogs" :key="log.id" class="log-entry" :class="log.level">
+            <span class="log-level" :class="'ll-'+log.level">{{ log.level }}</span>
+            <span class="log-time">{{ log.time }}</span>
+            <span class="log-msg" style="font-family:var(--mono);font-size:11.5px">{{ log.msg }}</span>
+            <span class="log-span">{{ log.service }}</span>
+          </div>
+        </div>
+      </template>
+
+      <!-- METRICS VIEW -->
+      <template v-if="nav==='metrics'">
+        <div class="detail-body" style="padding:20px;overflow:auto">
+          <div class="metrics-row" style="grid-template-columns:repeat(4,1fr);max-width:900px">
+            <div v-for="m in globalMetrics" :key="m.label" class="metric-card">
+              <div class="mc-label">{{ m.label }}</div>
+              <div class="mc-value" :style="{color: m.color}">{{ m.value }}</div>
+              <div class="mc-bar"><div class="mc-bar-fill" :style="{width: m.pct+'%', background: m.color}"></div></div>
+            </div>
+          </div>
+          <div style="margin-top:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;max-width:900px">
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px">Request Rate per Service</div>
+            <div v-for="s in serviceRates" :key="s.name" style="margin-bottom:10px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <span style="font-size:12px;color:var(--text)">{{ s.name }}</span>
+                <span style="font-size:11px;color:var(--text2);font-family:var(--mono)">{{ s.rps }} req/s</span>
+              </div>
+              <div style="height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
+                <div :style="{width:s.pct+'%', height:'100%', background:s.color, borderRadius:'3px'}"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- COLLECTORS VIEW -->
+      <template v-if="nav==='collectors'">
+        <div class="detail-body" style="padding:20px;overflow:auto">
+          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:16px">OTel Collectors</div>
+          <div v-for="col in collectors" :key="col.name"
+               style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;max-width:700px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <div :style="{width:'10px',height:'10px',borderRadius:'50%',background:col.active?'var(--green)':'var(--red)',flexShrink:0}"></div>
+              <span style="font-size:13px;font-weight:600;color:var(--text);flex:1">{{ col.name }}</span>
+              <span class="tag" :class="col.active?'tag-ok':'tag-error'">{{ col.active?'RUNNING':'STOPPED' }}</span>
+            </div>
+            <div class="attr-grid">
+              <div class="attr-row" v-for="a in col.attrs" :key="a.key">
+                <span class="attr-key">{{ a.key }}</span>
+                <span class="attr-val">{{ a.val }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- OTHER VIEWS placeholder -->
+      <template v-if="nav==='alerts' || nav==='settings'">
+        <div class="content">
+          <div class="empty-state">
+            <div class="empty-icon">{{ nav==='alerts'?'🔔':'🛠️' }}</div>
+            <div class="empty-text">{{ nav==='alerts'?'2 active alerts':'Settings panel' }}</div>
+          </div>
+        </div>
+      </template>
+
+    </div><!-- /main -->
+  </template>
+
+  <template v-else>
+    <div class="loading-overlay">
+      <div class="spinner"></div>
+      <span style="color:var(--text3);font-size:12px">Loading traces...</span>
+    </div>
+  </template>
+
+  <div v-if="toast.show" class="toast" :class="toast.type">
+    <span>{{ toast.icon }}</span><span>{{ toast.msg }}</span>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, onMounted } = Vue;
+createApp({
+  setup() {
+    const loading = ref(true);
+    const isDark = ref(true);
+    const sidebarCollapsed = ref(false);
+    const nav = ref('traces');
+    const searchQuery = ref('');
+    const filterStatus = ref('all');
+    const filterService = ref('all');
+    const activeTimeRange = ref('15m');
+    const activeTrace = ref(null);
+    const activeDetailTab = ref('waterfall');
+    const activeSpan = ref(null);
+    const hoveredSvc = ref(null);
+    const logSearch = ref('');
+    const logLevel = ref('all');
+
+    const toast = reactive({ show: false, msg: '', icon: '', type: 'success' });
+    let toastTimer = null;
+    const showToast = (msg, icon='✅', type='success') => {
+      clearTimeout(toastTimer);
+      Object.assign(toast, { show: true, msg, icon, type });
+      toastTimer = setTimeout(() => toast.show = false, 3000);
+    };
+
+    const toggleTheme = () => {
+      isDark.value = !isDark.value;
+      document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light');
+    };
+
+    const timeRanges = ['5m','15m','1h','6h','24h','7d'];
+    const navLabels = { traces:'Traces', services:'Service Map', metrics:'Metrics', logs:'Logs', collectors:'Collectors', alerts:'Alerts', settings:'Settings' };
+
+    const detailTabs = [
+      { id: 'waterfall', label: '🌊 Waterfall' },
+      { id: 'logs', label: '📋 Logs' },
+      { id: 'events', label: '⚡ Events' },
+      { id: 'attributes', label: '🔖 Attributes' },
+    ];
+
+    const spanColors = {
+      'api-gateway': '#4a9eff',
+      'user-service': '#a855f7',
+      'order-service': '#3ecf8e',
+      'payment-service': '#f5a623',
+      'inventory-service': '#ec4899',
+      'notification-service': '#22d3ee',
+      'db': '#7c5cbf',
+    };
+
+    const makeSpanTree = (totalMs, spans_raw) => {
+      return spans_raw.map(s => ({
+        ...s,
+        color: spanColors[s.service] || '#9898b8',
+        offsetPct: (s.offset / totalMs) * 100,
+        widthPct: (s.durationMs / totalMs) * 100,
+        duration: s.durationMs + 'ms',
+      }));
+    };
+
+    const traces = ref([
+      {
+        id: 'trace-7f3a2b1c',
+        rootSpan: 'POST /api/orders',
+        service: 'api-gateway',
+        method: 'POST',
+        path: '/api/v2/orders',
+        statusCode: 201,
+        status: 'ok',
+        duration: '284ms',
+        durMs: 284,
+        spans: 12,
+        errorSpans: 0,
+        serviceCount: 4,
+        time: '2s ago',
+        wfWidth: 28,
+        serviceNodes: [
+          { name: 'api-gateway', icon: '🌐', latency: '12ms' },
+          { name: 'order-service', icon: '📦', latency: '180ms' },
+          { name: 'payment-service', icon: '💳', latency: '60ms' },
+          { name: 'db', icon: '🗄️', latency: '32ms' },
+        ],
+        spanTree: makeSpanTree(284, [
+          { id:'s1', name:'POST /api/v2/orders', service:'api-gateway', depth:0, offset:0, durationMs:284, status:'ok', attrs:[
+            {key:'http.method', val:'POST'}, {key:'http.url', val:'https://api.example.com/v2/orders'},
+            {key:'http.status_code', val:'201', ok:true}, {key:'net.peer.ip', val:'10.0.1.5'},
+          ]},
+          { id:'s2', name:'authenticate_request', service:'api-gateway', depth:1, offset:2, durationMs:15, status:'ok', attrs:[
+            {key:'auth.method', val:'JWT'}, {key:'auth.user_id', val:'usr_8x2kp'},
+          ]},
+          { id:'s3', name:'validate_payload', service:'api-gateway', depth:1, offset:18, durationMs:8, status:'ok', attrs:[
+            {key:'validation.schema', val:'OrderCreateV2'}, {key:'validation.fields', val:'12'},
+          ]},
+          { id:'s4', name:'create_order', service:'order-service', depth:1, offset:28, durationMs:195, status:'ok', attrs:[
+            {key:'order.id', val:'ord_9qm3x'}, {key:'order.items', val:'3'}, {key:'order.total', val:'199000'},
+          ]},
+          { id:'s5', name:'check_inventory', service:'inventory-service', depth:2, offset:32, durationMs:45, status:'ok', attrs:[
+            {key:'inventory.items_checked', val:'3'}, {key:'inventory.all_available', val:'true', ok:true},
+          ]},
+          { id:'s6', name:'db.SELECT inventory', service:'db', depth:3, offset:35, durationMs:38, status:'ok', attrs:[
+            {key:'db.system', val:'postgresql'}, {key:'db.operation', val:'SELECT'}, {key:'db.rows_affected', val:'3'},
+          ]},
+          { id:'s7', name:'process_payment', service:'payment-service', depth:2, offset:80, durationMs:100, status:'ok', attrs:[
+            {key:'payment.provider', val:'DOKU'}, {key:'payment.method', val:'QRIS'}, {key:'payment.amount', val:'199000'},
+          ]},
+          { id:'s8', name:'db.INSERT orders', service:'db', depth:2, offset:185, durationMs:28, status:'ok', attrs:[
+            {key:'db.system', val:'postgresql'}, {key:'db.operation', val:'INSERT'}, {key:'db.rows_affected', val:'1'},
+          ]},
+          { id:'s9', name:'send_notification', service:'notification-service', depth:2, offset:218, durationMs:50, status:'ok', attrs:[
+            {key:'notification.channel', val:'email+push'}, {key:'notification.template', val:'order_confirmed'},
+          ]},
+        ]),
+        logs: [
+          { id:'l1', level:'INFO', time:'+0ms', msg:'Order request received from usr_8x2kp', span:'api-gateway' },
+          { id:'l2', level:'DEBUG', time:'+2ms', msg:'JWT validated, user authenticated', span:'api-gateway' },
+          { id:'l3', level:'INFO', time:'+28ms', msg:'Creating order ord_9qm3x with 3 items', span:'order-service' },
+          { id:'l4', level:'DEBUG', time:'+35ms', msg:'Checking inventory for 3 SKUs', span:'inventory-service' },
+          { id:'l5', level:'INFO', time:'+80ms', msg:'Payment processing via DOKU QRIS', span:'payment-service' },
+          { id:'l6', level:'INFO', time:'+180ms', msg:'Payment confirmed, inserting order', span:'order-service' },
+          { id:'l7', level:'INFO', time:'+284ms', msg:'Order created successfully: ord_9qm3x', span:'order-service' },
+        ],
+        events: [
+          { id:'e1', name:'request.received', icon:'📥', color:'#4a9eff', offset:'0ms', attrs:'method=POST path=/api/v2/orders' },
+          { id:'e2', name:'auth.validated', icon:'🔐', color:'#3ecf8e', offset:'17ms', attrs:'user_id=usr_8x2kp' },
+          { id:'e3', name:'inventory.checked', icon:'📦', color:'#a855f7', offset:'73ms', attrs:'items=3 all_available=true' },
+          { id:'e4', name:'payment.initiated', icon:'💳', color:'#f5a623', offset:'80ms', attrs:'provider=DOKU amount=199000' },
+          { id:'e5', name:'payment.confirmed', icon:'✅', color:'#3ecf8e', offset:'180ms', attrs:'txn_id=dku_9283' },
+          { id:'e6', name:'order.created', icon:'🎉', color:'#3ecf8e', offset:'213ms', attrs:'order_id=ord_9qm3x' },
+        ],
+        httpAttrs: [
+          { key:'http.method', val:'POST' },
+          { key:'http.url', val:'https://api.example.com/v2/orders' },
+          { key:'http.status_code', val:'201', ok:true },
+          { key:'http.request_content_length', val:'428' },
+          { key:'http.response_content_length', val:'312' },
+          { key:'http.scheme', val:'https' },
+          { key:'http.flavor', val:'1.1' },
+        ],
+        resourceAttrs: [
+          { key:'service.name', val:'api-gateway' },
+          { key:'service.version', val:'2.4.1' },
+          { key:'service.namespace', val:'production' },
+          { key:'deployment.environment', val:'production' },
+          { key:'host.name', val:'api-gw-prod-02' },
+          { key:'telemetry.sdk.name', val:'opentelemetry' },
+          { key:'telemetry.sdk.language', val:'dotnet' },
+          { key:'telemetry.sdk.version', val:'1.8.0' },
+        ],
+      },
+      {
+        id: 'trace-9e1f4d2a',
+        rootSpan: 'GET /api/users/profile',
+        service: 'user-service',
+        method: 'GET',
+        path: '/api/v1/users/usr_8x2kp/profile',
+        statusCode: 500,
+        status: 'error',
+        duration: '1.2s',
+        durMs: 1200,
+        spans: 8,
+        errorSpans: 2,
+        serviceCount: 2,
+        time: '15s ago',
+        wfWidth: 100,
+        serviceNodes: [
+          { name: 'api-gateway', icon: '🌐', latency: '5ms' },
+          { name: 'user-service', icon: '👤', latency: '1190ms' },
+          { name: 'db', icon: '🗄️', latency: '1150ms' },
+        ],
+        spanTree: makeSpanTree(1200, [
+          { id:'s1', name:'GET /api/v1/users/:id/profile', service:'api-gateway', depth:0, offset:0, durationMs:1200, status:'error', attrs:[
+            {key:'http.method', val:'GET'}, {key:'http.status_code', val:'500', err:true},
+          ]},
+          { id:'s2', name:'get_user_profile', service:'user-service', depth:1, offset:5, durationMs:1190, status:'error', attrs:[
+            {key:'user.id', val:'usr_8x2kp'}, {key:'error.type', val:'QueryTimeout', err:true},
+          ]},
+          { id:'s3', name:'db.SELECT users (SLOW)', service:'db', depth:2, offset:10, durationMs:1150, status:'error', attrs:[
+            {key:'db.system', val:'postgresql'}, {key:'db.operation', val:'SELECT'},
+            {key:'db.statement', val:'SELECT * FROM users WHERE id=$1 AND...'}, {key:'error', val:'query timeout exceeded 1000ms', err:true},
+          ]},
+        ]),
+        logs: [
+          { id:'l1', level:'INFO', time:'+0ms', msg:'GET profile request for usr_8x2kp', span:'api-gateway' },
+          { id:'l2', level:'WARN', time:'+500ms', msg:'Query running slow (>500ms), monitoring...', span:'db' },
+          { id:'l3', level:'ERROR', time:'+1000ms', msg:'Query timeout exceeded threshold (1000ms)', span:'db' },
+          { id:'l4', level:'ERROR', time:'+1190ms', msg:'Failed to fetch user profile: QueryTimeout', span:'user-service' },
+          { id:'l5', level:'ERROR', time:'+1200ms', msg:'Internal server error returned to client', span:'api-gateway' },
+        ],
+        events: [
+          { id:'e1', name:'request.received', icon:'📥', color:'#4a9eff', offset:'0ms', attrs:'GET /users/usr_8x2kp/profile' },
+          { id:'e2', name:'db.query.slow', icon:'⚠️', color:'#f5a623', offset:'500ms', attrs:'threshold=500ms elapsed=500ms' },
+          { id:'e3', name:'db.query.timeout', icon:'⏱️', color:'#e74c3c', offset:'1000ms', attrs:'max_duration=1000ms' },
+          { id:'e4', name:'exception', icon:'💥', color:'#e74c3c', offset:'1190ms', attrs:'type=QueryTimeout message=...' },
+        ],
+        httpAttrs: [
+          { key:'http.method', val:'GET' },
+          { key:'http.url', val:'https://api.example.com/v1/users/usr_8x2kp/profile' },
+          { key:'http.status_code', val:'500', err:true },
+        ],
+        resourceAttrs: [
+          { key:'service.name', val:'user-service' },
+          { key:'service.version', val:'1.9.3' },
+          { key:'deployment.environment', val:'production' },
+        ],
+      },
+      {
+        id: 'trace-3b8c7e9f',
+        rootSpan: 'PUT /api/inventory/stock',
+        service: 'inventory-service',
+        method: 'PUT',
+        path: '/api/v1/inventory/items/sku_4523',
+        statusCode: 200,
+        status: 'slow',
+        duration: '892ms',
+        durMs: 892,
+        spans: 9,
+        errorSpans: 0,
+        serviceCount: 3,
+        time: '1m ago',
+        wfWidth: 75,
+        serviceNodes: [
+          { name: 'api-gateway', icon: '🌐', latency: '8ms' },
+          { name: 'inventory-service', icon: '📦', latency: '750ms' },
+          { name: 'db', icon: '🗄️', latency: '700ms' },
+        ],
+        spanTree: makeSpanTree(892, [
+          { id:'s1', name:'PUT /api/v1/inventory/items/:sku', service:'api-gateway', depth:0, offset:0, durationMs:892, status:'ok', attrs:[] },
+          { id:'s2', name:'update_stock', service:'inventory-service', depth:1, offset:8, durationMs:880, status:'ok', attrs:[] },
+          { id:'s3', name:'db.UPDATE stock (SLOW)', service:'db', depth:2, offset:15, durationMs:700, status:'ok', attrs:[
+            {key:'db.rows_affected', val:'1'}, {key:'db.execution_time', val:'700ms'},
+          ]},
+          { id:'s4', name:'invalidate_cache', service:'inventory-service', depth:2, offset:720, durationMs:45, status:'ok', attrs:[] },
+          { id:'s5', name:'publish_event', service:'inventory-service', depth:2, offset:770, durationMs:120, status:'ok', attrs:[
+            {key:'messaging.destination', val:'inventory.stock.updated'}, {key:'messaging.system', val:'rabbitmq'},
+          ]},
+        ]),
+        logs: [
+          { id:'l1', level:'INFO', time:'+0ms', msg:'Stock update request for sku_4523', span:'inventory-service' },
+          { id:'l2', level:'WARN', time:'+715ms', msg:'DB update took 700ms, approaching threshold', span:'db' },
+          { id:'l3', level:'INFO', time:'+720ms', msg:'Cache invalidated for sku_4523', span:'inventory-service' },
+          { id:'l4', level:'INFO', time:'+892ms', msg:'Stock updated successfully', span:'inventory-service' },
+        ],
+        events: [
+          { id:'e1', name:'request.received', icon:'📥', color:'#4a9eff', offset:'0ms', attrs:'PUT /inventory/sku_4523' },
+          { id:'e2', name:'db.query.slow', icon:'⚠️', color:'#f5a623', offset:'715ms', attrs:'duration=700ms' },
+          { id:'e3', name:'cache.invalidated', icon:'🗑️', color:'#ec4899', offset:'720ms', attrs:'key=inv:sku_4523' },
+          { id:'e4', name:'event.published', icon:'📤', color:'#22d3ee', offset:'770ms', attrs:'topic=inventory.stock.updated' },
+        ],
+        httpAttrs: [
+          { key:'http.method', val:'PUT' },
+          { key:'http.status_code', val:'200', ok:true },
+        ],
+        resourceAttrs: [
+          { key:'service.name', val:'inventory-service' },
+          { key:'deployment.environment', val:'production' },
+        ],
+      },
+      {
+        id: 'trace-2d5e8f1a',
+        rootSpan: 'DELETE /api/sessions/:id',
+        service: 'user-service',
+        method: 'DELETE',
+        path: '/api/v1/sessions/sess_77xyz',
+        statusCode: 204,
+        status: 'ok',
+        duration: '42ms',
+        durMs: 42,
+        spans: 4,
+        errorSpans: 0,
+        serviceCount: 2,
+        time: '3m ago',
+        wfWidth: 10,
+        serviceNodes: [
+          { name: 'api-gateway', icon: '🌐', latency: '3ms' },
+          { name: 'user-service', icon: '👤', latency: '35ms' },
+        ],
+        spanTree: makeSpanTree(42, [
+          { id:'s1', name:'DELETE /api/v1/sessions/:id', service:'api-gateway', depth:0, offset:0, durationMs:42, status:'ok', attrs:[] },
+          { id:'s2', name:'revoke_session', service:'user-service', depth:1, offset:3, durationMs:38, status:'ok', attrs:[] },
+          { id:'s3', name:'db.DELETE sessions', service:'db', depth:2, offset:6, durationMs:30, status:'ok', attrs:[] },
+        ]),
+        logs: [
+          { id:'l1', level:'INFO', time:'+0ms', msg:'Session revoke request sess_77xyz', span:'user-service' },
+          { id:'l2', level:'INFO', time:'+42ms', msg:'Session revoked successfully', span:'user-service' },
+        ],
+        events: [
+          { id:'e1', name:'session.revoked', icon:'🔒', color:'#a855f7', offset:'38ms', attrs:'session_id=sess_77xyz' },
+        ],
+        httpAttrs: [{ key:'http.method', val:'DELETE' }, { key:'http.status_code', val:'204', ok:true }],
+        resourceAttrs: [{ key:'service.name', val:'user-service' }],
+      },
+      {
+        id: 'trace-6a9b3c4e',
+        rootSpan: 'PATCH /api/orders/:id/status',
+        service: 'order-service',
+        method: 'PATCH',
+        path: '/api/v2/orders/ord_9qm3x/status',
+        statusCode: 404,
+        status: 'error',
+        duration: '18ms',
+        durMs: 18,
+        spans: 3,
+        errorSpans: 1,
+        serviceCount: 2,
+        time: '5m ago',
+        wfWidth: 8,
+        serviceNodes: [
+          { name: 'api-gateway', icon: '🌐', latency: '2ms' },
+          { name: 'order-service', icon: '📦', latency: '15ms' },
+        ],
+        spanTree: makeSpanTree(18, [
+          { id:'s1', name:'PATCH /api/v2/orders/:id/status', service:'api-gateway', depth:0, offset:0, durationMs:18, status:'error', attrs:[
+            {key:'http.status_code', val:'404', err:true},
+          ]},
+          { id:'s2', name:'update_order_status', service:'order-service', depth:1, offset:2, durationMs:16, status:'error', attrs:[
+            {key:'order.id', val:'ord_9qm3x'}, {key:'error', val:'Order not found', err:true},
+          ]},
+        ]),
+        logs: [
+          { id:'l1', level:'WARN', time:'+2ms', msg:'Order ord_9qm3x not found in database', span:'order-service' },
+          { id:'l2', level:'INFO', time:'+18ms', msg:'404 returned to client', span:'api-gateway' },
+        ],
+        events: [
+          { id:'e1', name:'order.not_found', icon:'❓', color:'#e74c3c', offset:'2ms', attrs:'order_id=ord_9qm3x' },
+        ],
+        httpAttrs: [{ key:'http.method', val:'PATCH' }, { key:'http.status_code', val:'404', err:true }],
+        resourceAttrs: [{ key:'service.name', val:'order-service' }],
+      },
+    ]);
+
+    const allLogs = ref([
+      { id:'gl1', level:'ERROR', time:'09:41:05', msg:'[user-service] QueryTimeout on SELECT users: duration exceeded 1000ms', service:'user-service' },
+      { id:'gl2', level:'ERROR', time:'09:41:06', msg:'[api-gateway] 500 Internal Server Error returned for GET /users/usr_8x2kp/profile', service:'api-gateway' },
+      { id:'gl3', level:'WARN', time:'09:40:30', msg:'[inventory-service] DB update took 700ms (threshold: 500ms)', service:'inventory-service' },
+      { id:'gl4', level:'INFO', time:'09:40:28', msg:'[order-service] Order ord_9qm3x created, items=3 total=199000', service:'order-service' },
+      { id:'gl5', level:'DEBUG', time:'09:40:20', msg:'[api-gateway] JWT validated for usr_8x2kp in 15ms', service:'api-gateway' },
+      { id:'gl6', level:'INFO', time:'09:40:18', msg:'[payment-service] QRIS payment confirmed txn_id=dku_9283', service:'payment-service' },
+      { id:'gl7', level:'WARN', time:'09:39:55', msg:'[notification-service] Email delivery delayed 2.1s (SMTP queue full)', service:'notification-service' },
+      { id:'gl8', level:'ERROR', time:'09:39:40', msg:'[order-service] 404 Order ord_9qm3x not found for PATCH request', service:'order-service' },
+      { id:'gl9', level:'DEBUG', time:'09:39:30', msg:'[db] Connection pool: 24/50 active connections', service:'db' },
+      { id:'gl10', level:'INFO', time:'09:39:20', msg:'[user-service] Session sess_77xyz revoked successfully', service:'user-service' },
+    ]);
+
+    const serviceMap = ref([
+      { name: 'api-gateway', icon: '🌐', latency: '12ms', status: 'ok' },
+      { name: 'user-service', icon: '👤', latency: '1.2s', status: 'error' },
+      { name: 'order-service', icon: '📦', latency: '284ms', status: 'ok' },
+      { name: 'payment-service', icon: '💳', latency: '100ms', status: 'ok' },
+      { name: 'inventory-service', icon: '🎁', latency: '892ms', status: 'ok' },
+      { name: 'db', icon: '🗄️', latency: '1150ms', status: 'error' },
+    ]);
+
+    const svcMetrics = ref([
+      { label: 'Total RPS', value: '1,247', color: 'var(--blue)', pct: 75 },
+      { label: 'Error Rate', value: '2.4%', color: 'var(--red)', pct: 24 },
+      { label: 'p99 Latency', value: '1.24s', color: 'var(--yellow)', pct: 62 },
+      { label: 'Apdex Score', value: '0.87', color: 'var(--green)', pct: 87 },
+      { label: 'Active Spans', value: '4,830', color: 'var(--purple)', pct: 48 },
+      { label: 'Throughput', value: '98.2%', color: 'var(--green)', pct: 98 },
+    ]);
+
+    const globalMetrics = ref([
+      { label: 'Requests/sec', value: '1,247', color: 'var(--blue)', pct: 75 },
+      { label: 'Error Rate', value: '2.4%', color: 'var(--red)', pct: 24 },
+      { label: 'p50 Latency', value: '84ms', color: 'var(--green)', pct: 30 },
+      { label: 'p99 Latency', value: '1.24s', color: 'var(--yellow)', pct: 62 },
+    ]);
+
+    const serviceRates = ref([
+      { name: 'api-gateway', rps: 1247, pct: 100, color: 'var(--blue)' },
+      { name: 'order-service', rps: 892, pct: 71, color: 'var(--green)' },
+      { name: 'user-service', rps: 745, pct: 60, color: 'var(--purple)' },
+      { name: 'payment-service', rps: 320, pct: 26, color: 'var(--yellow)' },
+      { name: 'inventory-service', rps: 285, pct: 23, color: 'var(--pink)' },
+      { name: 'notification-service', rps: 180, pct: 14, color: 'var(--cyan)' },
+    ]);
+
+    const collectors = ref([
+      {
+        name: 'otel-collector-prod-01',
+        active: true,
+        attrs: [
+          { key: 'endpoint', val: '0.0.0.0:4317 (gRPC)' },
+          { key: 'exporters', val: 'jaeger, prometheus, logging' },
+          { key: 'receivers', val: 'otlp, zipkin, jaeger' },
+          { key: 'processors', val: 'batch, memory_limiter, resource' },
+          { key: 'uptime', val: '14d 6h 22m' },
+          { key: 'spans_received', val: '2,840,192 / 24h' },
+        ]
+      },
+      {
+        name: 'otel-collector-staging-01',
+        active: true,
+        attrs: [
+          { key: 'endpoint', val: '0.0.0.0:4318 (HTTP)' },
+          { key: 'exporters', val: 'jaeger, logging' },
+          { key: 'uptime', val: '3d 11h 05m' },
+          { key: 'spans_received', val: '124,880 / 24h' },
+        ]
+      },
+      {
+        name: 'otel-collector-dev-01',
+        active: false,
+        attrs: [
+          { key: 'endpoint', val: '0.0.0.0:4317 (gRPC)' },
+          { key: 'last_seen', val: '2 hours ago' },
+          { key: 'status', val: 'Stopped — manual shutdown' },
+        ]
+      },
+    ]);
+
+    const serviceList = computed(() => [...new Set(traces.value.map(t => t.service))]);
+    const errorLogs = computed(() => allLogs.value.filter(l => l.level === 'ERROR').length);
+
+    const filteredTraces = computed(() => traces.value.filter(t => {
+      if (filterStatus.value !== 'all' && t.status !== filterStatus.value) return false;
+      if (filterService.value !== 'all' && t.service !== filterService.value) return false;
+      if (searchQuery.value) {
+        const q = searchQuery.value.toLowerCase();
+        return t.rootSpan.toLowerCase().includes(q) || t.id.includes(q) || t.path.toLowerCase().includes(q) || t.service.toLowerCase().includes(q);
+      }
+      return true;
+    }));
+
+    const filteredLogs = computed(() => allLogs.value.filter(l => {
+      if (logLevel.value !== 'all' && l.level !== logLevel.value) return false;
+      if (logSearch.value) return l.msg.toLowerCase().includes(logSearch.value.toLowerCase()) || l.service.toLowerCase().includes(logSearch.value.toLowerCase());
+      return true;
+    }));
+
+    const statusColor = (status) => {
+      if (status === 'error') return 'var(--red)';
+      if (status === 'slow') return 'var(--yellow)';
+      return 'var(--green)';
+    };
+
+    const statusCodeClass = (code) => {
+      if (code >= 500) return 'sc-5xx';
+      if (code >= 400) return 'sc-4xx';
+      return 'sc-2xx';
+    };
+
+    const halfDur = (dur) => {
+      const n = parseInt(dur);
+      if (dur.includes('s') && !dur.includes('ms')) return Math.round(n * 500) + 'ms';
+      return Math.round(n / 2) + 'ms';
+    };
+
+    const selectTrace = (trace) => {
+      activeTrace.value = trace;
+      activeSpan.value = null;
+      activeDetailTab.value = 'waterfall';
+    };
+
+    const refreshTraces = () => {
+      showToast('Traces refreshed', '🔄', 'info');
+    };
+
+    onMounted(() => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      setTimeout(() => {
+        loading.value = false;
+        setTimeout(() => selectTrace(traces.value[0]), 100);
+      }, 700);
+    });
+
+    return {
+      loading, isDark, sidebarCollapsed, nav, navLabels, searchQuery,
+      filterStatus, filterService, activeTimeRange, timeRanges,
+      traces, filteredTraces, activeTrace, activeDetailTab, detailTabs,
+      activeSpan, hoveredSvc, logSearch, logLevel,
+      allLogs, filteredLogs, errorLogs,
+      serviceList, serviceMap, svcMetrics, globalMetrics, serviceRates, collectors,
+      toast, showToast, toggleTheme, statusColor, statusCodeClass, halfDur,
+      selectTrace, refreshTraces,
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

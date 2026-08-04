@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Othelia.Api/Othelia.Api.csproj" />
+  </Folder>
+</Solution>
