@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import type {
+  AlertsSettingsVM,
+  CollectorsSettingsVM,
   IngestionFilterRuleVM,
   IngestionSettingsVM,
+  LiveSettingsVM,
+  MetricsSettingsVM,
   QuerySettingsVM,
   RetentionSettingsVM,
+  ServiceMapSettingsVM,
   StorageSettingsVM,
   TracingSettingsPatch,
 } from '~/utils/settingsTypes'
@@ -15,17 +20,28 @@ const form = reactive<{
   ingestion: IngestionSettingsVM
   storage: StorageSettingsVM
   query: QuerySettingsVM
+  alerts: AlertsSettingsVM
+  metrics: MetricsSettingsVM
+  serviceMap: ServiceMapSettingsVM
+  collectors: CollectorsSettingsVM
+  live: LiveSettingsVM
   retention: RetentionSettingsVM
 }>({
   ingestion: { enabled: true, endpoint: 'http://localhost:4318', rules: [] },
   storage: { provider: 'SqlServer', connectionString: null },
   query: {
     maxTracesPerRequest: 100,
+    maxSpansPerTrace: 5000,
     defaultLookbackSeconds: 3600,
     slowThresholdMs: 1000,
     dashboardWindowSeconds: 86400,
     dashboardBuckets: 24,
   },
+  alerts: { enabled: true, maxAlerts: 10, errorRateDownThreshold: 5 },
+  metrics: { enabled: true, defaultBucketSeconds: 60, maxSeriesPoints: 1000 },
+  serviceMap: { windowSeconds: 86400 },
+  collectors: { windowSeconds: 3600, staleMinutes: 5 },
+  live: { streamIntervalSeconds: 5 },
   retention: { enabled: false, retentionDays: 7, cleanupIntervalHours: 24 },
 })
 
@@ -45,6 +61,19 @@ watch(
     }
     form.storage = { ...s.storage }
     form.query = { ...s.query }
+    form.alerts = {
+      enabled: s.alerts?.enabled ?? true,
+      maxAlerts: s.alerts?.maxAlerts ?? 10,
+      errorRateDownThreshold: s.alerts?.errorRateDownThreshold ?? 5,
+    }
+    form.metrics = {
+      enabled: s.metrics?.enabled ?? true,
+      defaultBucketSeconds: s.metrics?.defaultBucketSeconds ?? 60,
+      maxSeriesPoints: s.metrics?.maxSeriesPoints ?? 1000,
+    }
+    form.serviceMap = { windowSeconds: s.serviceMap?.windowSeconds ?? 86400 }
+    form.collectors = { windowSeconds: s.collectors?.windowSeconds ?? 3600, staleMinutes: s.collectors?.staleMinutes ?? 5 }
+    form.live = { streamIntervalSeconds: s.live?.streamIntervalSeconds ?? 5 }
     form.retention = { ...s.retention }
     dirty.value = false
   },
@@ -87,8 +116,19 @@ function buildPatch(): TracingSettingsPatch {
     ingestionEndpoint: form.ingestion.endpoint || undefined,
     ingestionRules: form.ingestion.rules,
     queryMaxTracesPerRequest: form.query.maxTracesPerRequest,
+    queryMaxSpansPerTrace: form.query.maxSpansPerTrace,
     queryDefaultLookbackSeconds: form.query.defaultLookbackSeconds,
     querySlowThresholdMs: form.query.slowThresholdMs,
+    alertsEnabled: form.alerts.enabled,
+    alertsMaxAlerts: form.alerts.maxAlerts,
+    alertsErrorRateDownThreshold: form.alerts.errorRateDownThreshold,
+    metricsEnabled: form.metrics.enabled,
+    metricsDefaultBucketSeconds: form.metrics.defaultBucketSeconds,
+    metricsMaxSeriesPoints: form.metrics.maxSeriesPoints,
+    serviceMapWindowSeconds: form.serviceMap.windowSeconds,
+    collectorsWindowSeconds: form.collectors.windowSeconds,
+    collectorsStaleMinutes: form.collectors.staleMinutes,
+    liveStreamIntervalSeconds: form.live.streamIntervalSeconds,
     retentionEnabled: form.retention.enabled,
     retentionDays: form.retention.retentionDays,
     retentionCleanupIntervalHours: form.retention.cleanupIntervalHours,
@@ -217,6 +257,16 @@ onMounted(() => {
               >
             </div>
             <div class="field">
+              <label class="field-label">Max spans per trace</label>
+              <input
+                v-model.number="form.query.maxSpansPerTrace"
+                class="text-input"
+                type="number"
+                min="1"
+                @input="dirty = true"
+              >
+            </div>
+            <div class="field">
               <label class="field-label">Default lookback (seconds)</label>
               <input
                 v-model.number="form.query.defaultLookbackSeconds"
@@ -240,21 +290,157 @@ onMounted(() => {
               <div class="field">
                 <label class="field-label">Dashboard window (s)</label>
                 <input
-                  :value="form.query.dashboardWindowSeconds"
+                  v-model.number="form.query.dashboardWindowSeconds"
                   class="text-input"
                   type="number"
-                  readonly
+                  min="60"
+                  @input="dirty = true"
                 >
               </div>
               <div class="field">
                 <label class="field-label">Dashboard buckets</label>
                 <input
-                  :value="form.query.dashboardBuckets"
+                  v-model.number="form.query.dashboardBuckets"
                   class="text-input"
                   type="number"
-                  readonly
+                  min="1"
+                  @input="dirty = true"
                 >
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-card">
+          <div class="sc-header">
+            <span class="sc-title">Alerts</span>
+            <span class="sc-desc">Error/slow alert rules</span>
+          </div>
+          <div class="sc-body">
+            <label class="field-toggle">
+              <input v-model="form.alerts.enabled" type="checkbox" @change="dirty = true">
+              <span>Enabled</span>
+            </label>
+            <div class="field">
+              <label class="field-label">Max alerts</label>
+              <input
+                v-model.number="form.alerts.maxAlerts"
+                class="text-input"
+                type="number"
+                min="1"
+                @input="dirty = true"
+              >
+            </div>
+            <div class="field">
+              <label class="field-label">Error rate threshold (%)</label>
+              <input
+                v-model.number="form.alerts.errorRateDownThreshold"
+                class="text-input"
+                type="number"
+                min="0"
+                step="0.5"
+                @input="dirty = true"
+              >
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-card">
+          <div class="sc-header">
+            <span class="sc-title">Metrics</span>
+            <span class="sc-desc">OTLP metrics storage</span>
+          </div>
+          <div class="sc-body">
+            <label class="field-toggle">
+              <input v-model="form.metrics.enabled" type="checkbox" @change="dirty = true">
+              <span>Enabled</span>
+            </label>
+            <div class="field">
+              <label class="field-label">Default bucket (s)</label>
+              <input
+                v-model.number="form.metrics.defaultBucketSeconds"
+                class="text-input"
+                type="number"
+                min="1"
+                @input="dirty = true"
+              >
+            </div>
+            <div class="field">
+              <label class="field-label">Max series points</label>
+              <input
+                v-model.number="form.metrics.maxSeriesPoints"
+                class="text-input"
+                type="number"
+                min="1"
+                @input="dirty = true"
+              >
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-card">
+          <div class="sc-header">
+            <span class="sc-title">Service Map</span>
+            <span class="sc-desc">/api/service-map window</span>
+          </div>
+          <div class="sc-body">
+            <div class="field">
+              <label class="field-label">Window (s)</label>
+              <input
+                v-model.number="form.serviceMap.windowSeconds"
+                class="text-input"
+                type="number"
+                min="1"
+                @input="dirty = true"
+              >
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-card">
+          <div class="sc-header">
+            <span class="sc-title">Collectors</span>
+            <span class="sc-desc">Running/stopped status</span>
+          </div>
+          <div class="sc-body">
+            <div class="field">
+              <label class="field-label">Window (s)</label>
+              <input
+                v-model.number="form.collectors.windowSeconds"
+                class="text-input"
+                type="number"
+                min="1"
+                @input="dirty = true"
+              >
+            </div>
+            <div class="field">
+              <label class="field-label">Stale after (minutes)</label>
+              <input
+                v-model.number="form.collectors.staleMinutes"
+                class="text-input"
+                type="number"
+                min="1"
+                @input="dirty = true"
+              >
+            </div>
+          </div>
+        </section>
+
+        <section class="settings-card">
+          <div class="sc-header">
+            <span class="sc-title">Live</span>
+            <span class="sc-desc">SSE dashboard stream</span>
+          </div>
+          <div class="sc-body">
+            <div class="field">
+              <label class="field-label">Stream interval (s)</label>
+              <input
+                v-model.number="form.live.streamIntervalSeconds"
+                class="text-input"
+                type="number"
+                min="1"
+                @input="dirty = true"
+              >
             </div>
           </div>
         </section>

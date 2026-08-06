@@ -60,6 +60,9 @@
       "WindowSeconds": 3600,
       "StaleMinutes": 5
     },
+    "Live": {
+      "StreamIntervalSeconds": 5
+    },
     "Api": {
       "Host": "localhost",
       "Port": 5007

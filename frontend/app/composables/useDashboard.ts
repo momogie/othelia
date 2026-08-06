@@ -99,7 +99,7 @@ export function useDashboard() {
     }
   }
 
-  function apply(d: ApiDashboard) {
+  function applyRaw(d: ApiDashboard) {
     const hours = Math.max(1, Math.round((d.windowSeconds ?? 0) / 3600))
     const window = hours >= 24 ? '24h' : `${hours}h`
     windowLabel.value = window
@@ -179,7 +179,7 @@ export function useDashboard() {
       const data = await $fetch<ApiDashboard>('/api/dashboard', {
         query: { service: selectedService.value === 'all' ? undefined : selectedService.value },
       })
-      apply(data)
+      applyRaw(data)
     } catch (e) {
       console.error('Failed to load dashboard', e)
       metrics.value = []
@@ -206,6 +206,7 @@ export function useDashboard() {
     servicesSlow,
     maxThroughput,
     acknowledgeAlert,
+    applyRaw,
     refresh,
   }
 }

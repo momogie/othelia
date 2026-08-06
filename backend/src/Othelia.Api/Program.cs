@@ -138,4 +138,6 @@ app.MapRazorPages();
 
 app.MapOtlpEndpoints();
 
+app.MapStreamEndpoints();
+
 app.Run();

@@ -170,6 +170,26 @@ LEFT JOIN Roots r ON r.TraceId = a.TraceId AND r.rn = 1";
             parameters.Add("MaxDurationUs", query.MaxDurationMs.Value * 1000L);
         }
 
+        if (!string.IsNullOrWhiteSpace(query.Attributes))
+        {
+            var (key, value) = SplitAttribute(query.Attributes);
+            var attrKey = EscapeLike(key);
+            if (string.IsNullOrEmpty(value))
+            {
+                where.Add("EXISTS (SELECT 1 FROM dbo.Spans s3 WHERE s3.TraceId = a.TraceId AND s3.AttributesJson LIKE @AttrPattern ESCAPE N'~')");
+                parameters.Add("AttrPattern", $"%\"{attrKey}\":%");
+            }
+            else
+            {
+                var attrValue = EscapeLike(value);
+                where.Add(@"EXISTS (SELECT 1 FROM dbo.Spans s3 WHERE s3.TraceId = a.TraceId
+                    AND (s3.AttributesJson LIKE @AttrPatternQuoted ESCAPE N'~'
+                         OR s3.AttributesJson LIKE @AttrPatternRaw ESCAPE N'~'))");
+                parameters.Add("AttrPatternQuoted", $"%\"{attrKey}\":\"{attrValue}\"%");
+                parameters.Add("AttrPatternRaw", $"%\"{attrKey}\":{attrValue}%");
+            }
+        }
+
         switch (query.Status?.ToLowerInvariant())
         {
             case "error":
@@ -398,6 +418,17 @@ FROM dbo.Logs";
         .Replace("%", "~%")
         .Replace("_", "~_")
         .Replace("[", "~[");
+
+    private static (string Key, string? Value) SplitAttribute(string attributes)
+    {
+        var index = attributes.IndexOf('=');
+        if (index <= 0)
+            return (attributes.Trim(), null);
+
+        var key = attributes[..index].Trim();
+        var value = attributes[(index + 1)..].Trim();
+        return (key, value.Length == 0 ? null : value);
+    }
 
     public async Task<IReadOnlyList<SpanRecord>> QuerySpansAsync(string traceId, int maxRows, CancellationToken ct)
     {

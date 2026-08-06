@@ -9,6 +9,7 @@ public sealed class TracingOptions
     public TracingMetricsOptions Metrics { get; set; } = new();
     public TracingServiceMapOptions ServiceMap { get; set; } = new();
     public TracingCollectorsOptions Collectors { get; set; } = new();
+    public TracingLiveOptions Live { get; set; } = new();
     public TracingRetentionOptions Retention { get; set; } = new();
 }
 
@@ -69,6 +70,11 @@ public sealed class TracingCollectorsOptions
 {
     public int WindowSeconds { get; set; } = 3600;
     public int StaleMinutes { get; set; } = 5;
+}
+
+public sealed class TracingLiveOptions
+{
+    public int StreamIntervalSeconds { get; set; } = 5;
 }
 
 public sealed class TracingRetentionOptions

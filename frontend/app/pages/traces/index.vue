@@ -36,6 +36,7 @@ const activeTrace = computed<TraceVM | null>(() => {
 const hasAdvancedFilter = computed(() =>
   !!filter.value.name.trim()
   || !!filter.value.path.trim()
+  || !!filter.value.attributes.trim()
   || !!filter.value.traceId.trim()
   || filter.value.minDurationMs != null
   || filter.value.maxDurationMs != null,
@@ -61,6 +62,7 @@ function clearAdvancedFilters() {
   filter.value.nameNot = false
   filter.value.path = ''
   filter.value.pathNot = false
+  filter.value.attributes = ''
   filter.value.traceId = ''
   filter.value.minDurationMs = null
   filter.value.maxDurationMs = null
@@ -166,6 +168,16 @@ onMounted(() => {
           @input="onAdvancedInput"
         >
       </div>
+    </div>
+    <div class="fp-group">
+      <label class="fp-label">Attribute (key=value)</label>
+      <input
+        v-model="filter.attributes"
+        class="text-input"
+        type="text"
+        placeholder="e.g. http.request.method=GET"
+        @input="onAdvancedInput"
+      >
     </div>
     <div class="fp-group">
       <label class="fp-label">Trace ID</label>

@@ -11,6 +11,7 @@ public sealed record TraceQuery
     public string? NameNot { get; init; }
     public string? Path { get; init; }
     public string? PathNot { get; init; }
+    public string? Attributes { get; init; }
     public long? MinDurationMs { get; init; }
     public long? MaxDurationMs { get; init; }
     public int? SlowThresholdMs { get; init; }

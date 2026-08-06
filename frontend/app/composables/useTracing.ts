@@ -22,6 +22,7 @@ export interface TraceFilterState {
   nameNot: boolean
   path: string
   pathNot: boolean
+  attributes: string
   traceId: string
   minDurationMs: number | null
   maxDurationMs: number | null
@@ -49,6 +50,7 @@ export function useTracing() {
     nameNot: false,
     path: '',
     pathNot: false,
+    attributes: '',
     traceId: '',
     minDurationMs: null,
     maxDurationMs: null,
@@ -67,6 +69,7 @@ export function useTracing() {
     if (f.status && f.status !== 'all') q.status = f.status
     if (f.name.trim()) q[f.nameNot ? 'nameNot' : 'name'] = f.name.trim()
     if (f.path.trim()) q[f.pathNot ? 'pathNot' : 'path'] = f.path.trim()
+    if (f.attributes.trim()) q.attributes = f.attributes.trim()
     if (f.traceId.trim()) q.traceId = f.traceId.trim()
     if (f.minDurationMs != null) q.minDurationMs = f.minDurationMs
     if (f.maxDurationMs != null) q.maxDurationMs = f.maxDurationMs

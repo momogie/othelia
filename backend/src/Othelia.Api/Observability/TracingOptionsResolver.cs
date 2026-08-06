@@ -21,6 +21,7 @@ public sealed class TracingSettingsPatch
     public int? ServiceMapWindowSeconds { get; set; }
     public int? CollectorsWindowSeconds { get; set; }
     public int? CollectorsStaleMinutes { get; set; }
+    public int? LiveStreamIntervalSeconds { get; set; }
     public bool? RetentionEnabled { get; set; }
     public int? RetentionDays { get; set; }
     public int? RetentionCleanupIntervalHours { get; set; }
@@ -145,6 +146,8 @@ public sealed class TracingOptionsResolver : ITracingOptionsResolver
             options.Collectors.WindowSeconds = patch.CollectorsWindowSeconds.Value;
         if (patch.CollectorsStaleMinutes.HasValue)
             options.Collectors.StaleMinutes = patch.CollectorsStaleMinutes.Value;
+        if (patch.LiveStreamIntervalSeconds.HasValue)
+            options.Live.StreamIntervalSeconds = patch.LiveStreamIntervalSeconds.Value;
         if (patch.RetentionEnabled.HasValue)
             options.Retention.Enabled = patch.RetentionEnabled.Value;
         if (patch.RetentionDays.HasValue)

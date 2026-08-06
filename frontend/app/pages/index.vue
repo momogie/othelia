@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { mapTraceSummary } from '~/utils/traceMapper'
+
 const {
   metrics,
   throughput,
@@ -14,10 +16,10 @@ const {
 } = useDashboard()
 
 const { traces, refresh: refreshTraces } = useTracing()
+const { applyRaw: applyDashboardRaw } = useDashboard()
+const { selectedService } = useServiceScope()
 
 const recentTraces = computed(() => traces.value.slice(0, 5))
-
-const LIVE_INTERVAL_MS = 1000
 
 const rangeOptions = ['1m', '5m', '15m', '30m', '1h']
 const activeRange = ref('1m')
@@ -26,7 +28,6 @@ const rangeSeries = ref<{ time: string; timestamp: string; value: number }[]>([]
 
 async function refreshRangeSeries() {
   try {
-    const { selectedService } = useServiceScope()
     const d = await $fetch<{ windowSeconds: number; points: { time: string; timestamp: string; value: number }[] }>(
       `/api/dashboard/throughput?range=${activeRange.value}`,
       { query: { service: selectedService.value === 'all' ? undefined : selectedService.value } },
@@ -44,29 +45,67 @@ async function refreshRangeSeries() {
 }
 
 const live = ref(true)
-const ticking = ref(false)
-let timer: ReturnType<typeof setInterval> | null = null
+let eventSource: EventSource | null = null
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempts = 0
 
-function tick() {
-  if (ticking.value) return
-  ticking.value = true
-  Promise.allSettled([refreshDashboard(), refreshTraces(), refreshRangeSeries()]).finally(() => {
-    ticking.value = false
-  })
+function streamUrl(): string {
+  const params = new URLSearchParams({ range: activeRange.value })
+  if (selectedService.value !== 'all') params.set('service', selectedService.value)
+  return `/api/stream?${params.toString()}`
+}
+
+function applySsePayload(data: Record<string, any>) {
+  try {
+    if (data.dashboard) applyDashboardRaw(data.dashboard)
+    if (Array.isArray(data.traces)) traces.value = data.traces.map(mapTraceSummary)
+    if (data.throughput?.points) {
+      rangeWindow.value = data.throughput.windowSeconds || 60
+      rangeSeries.value = data.throughput.points.map((p) => ({
+        time: p.time,
+        timestamp: p.timestamp,
+        value: Math.round(p.value),
+      }))
+    }
+  } catch (e) {
+    console.error('Failed to apply SSE payload', e)
+  }
+}
+
+function openStream() {
+  closeStream()
+  reconnectAttempts = 0
+  eventSource = new EventSource(streamUrl())
+  eventSource.onmessage = (ev) => applySsePayload(JSON.parse(ev.data))
+  eventSource.onerror = () => {
+    eventSource?.close()
+    eventSource = null
+    if (!live.value) return
+    const delay = Math.min(30000, 1000 * 2 ** reconnectAttempts)
+    reconnectAttempts++
+    reconnectTimer = setTimeout(openStream, delay)
+  }
+}
+
+function closeStream() {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
 }
 
 function startLive() {
   live.value = true
-  if (timer) return
-  timer = setInterval(tick, LIVE_INTERVAL_MS)
+  openStream()
 }
 
 function stopLive() {
   live.value = false
-  if (timer) {
-    clearInterval(timer)
-    timer = null
-  }
+  closeStream()
 }
 
 function handleVisibility() {
@@ -85,6 +124,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   stopLive()
   document.removeEventListener('visibilitychange', handleVisibility)
+})
+
+watch([selectedService, activeRange], () => {
+  if (live.value) openStream()
 })
 
 function statusColor(status: string) {
@@ -119,7 +162,7 @@ function statusCodeClass(code: number) {
       </div>
       <button class="live-btn" :class="{ paused: !live }" :title="live ? 'Pause live updates' : 'Resume live updates'" @click="live ? stopLive() : startLive()">
         <div class="live-dot" :class="{ dim: !live || loading }"></div>
-        <span class="live-label">{{ live ? 'Live · 1s' : 'Paused' }}</span>
+        <span class="live-label">{{ live ? 'Live · SSE' : 'Paused' }}</span>
       </button>
     </div>
 

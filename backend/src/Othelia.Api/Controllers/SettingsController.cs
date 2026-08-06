@@ -62,6 +62,8 @@ public sealed class SettingsController : ControllerBase
             return "CollectorsWindowSeconds must be at least 1.";
         if (patch.CollectorsStaleMinutes is < 1)
             return "CollectorsStaleMinutes must be at least 1.";
+        if (patch.LiveStreamIntervalSeconds is < 1)
+            return "LiveStreamIntervalSeconds must be at least 1.";
         if (patch.RetentionDays is < 0)
             return "RetentionDays must not be negative.";
         if (patch.RetentionCleanupIntervalHours is < 1)
