@@ -24,14 +24,30 @@ public static class OtlpEndpoints
             .WithName("ExportLogs");
     }
 
-    private static async Task<IResult> HandleTracesAsync(HttpContext context, ITelemetryStore store, ILoggerFactory loggerFactory)
+    private static async Task<IResult> HandleTracesAsync(
+        HttpContext context,
+        ITelemetryStore store,
+        ITracingOptionsResolver resolver,
+        ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger("Otlp.Traces");
         try
         {
             var request = await ReadRequestAsync<ExportTraceServiceRequest>(context.Request, context.RequestAborted);
             var spans = OtlpTraceConverter.ConvertRequest(request);
-            await store.InsertSpansAsync(spans, context.RequestAborted);
+
+            var options = await resolver.ResolveAsync(context.RequestAborted);
+            if (!options.Ingestion.Enabled)
+            {
+                logger.LogDebug("Trace ingestion disabled; accepted and dropped {Count} spans.", spans.Count);
+                return Results.Bytes(Array.Empty<byte>(), "application/x-protobuf");
+            }
+
+            var filtered = IngestionFilter.Apply(spans, options.Ingestion.Rules);
+            if (filtered.Count < spans.Count)
+                logger.LogInformation("Ingestion filters dropped {Dropped}/{Total} spans.", spans.Count - filtered.Count, spans.Count);
+
+            await store.InsertSpansAsync(filtered, context.RequestAborted);
             return Results.Bytes(Array.Empty<byte>(), "application/x-protobuf");
         }
         catch (UnsupportedContentTypeException ex)
@@ -56,7 +72,7 @@ public static class OtlpEndpoints
         {
             var request = await ReadRequestAsync<ExportMetricsServiceRequest>(context.Request, context.RequestAborted);
             var count = request.ResourceMetrics.Sum(rm => rm.ScopeMetrics.Sum(sm => sm.Metrics.Count));
-            logger.LogInformation("Received {Count} metrics (not persisted in Phase 1).", count);
+            logger.LogDebug("Received {Count} metrics (not persisted in Phase 1).", count);
             return Results.Bytes(Array.Empty<byte>(), "application/x-protobuf");
         }
         catch (UnsupportedContentTypeException ex)
@@ -81,7 +97,7 @@ public static class OtlpEndpoints
         {
             var request = await ReadRequestAsync<ExportLogsServiceRequest>(context.Request, context.RequestAborted);
             var count = request.ResourceLogs.Sum(rl => rl.ScopeLogs.Sum(sl => sl.LogRecords.Count));
-            logger.LogInformation("Received {Count} log records (not persisted in Phase 1).", count);
+            logger.LogDebug("Received {Count} log records (not persisted in Phase 1).", count);
             return Results.Bytes(Array.Empty<byte>(), "application/x-protobuf");
         }
         catch (UnsupportedContentTypeException ex)

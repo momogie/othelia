@@ -17,6 +17,15 @@ public sealed class SchemaInitializer : ISchemaInitializer
     public async Task EnsureSchemaAsync(CancellationToken ct)
     {
         const string sql = @"
+IF OBJECT_ID(N'dbo.Settings', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Settings
+    (
+        [Key]   NVARCHAR(200)  NOT NULL CONSTRAINT PK_Settings PRIMARY KEY,
+        [Value] NVARCHAR(MAX)   NOT NULL
+    );
+END;
+
 IF OBJECT_ID(N'dbo.Spans', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Spans

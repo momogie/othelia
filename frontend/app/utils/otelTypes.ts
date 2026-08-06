@@ -37,3 +37,53 @@ export interface ApiService {
   totalTraces: number
   errorCount: number
 }
+
+export interface ApiDashboard {
+  generatedAt: string
+  windowSeconds: number
+  buckets: number
+  metrics: {
+    totalRequests: number
+    totalSpans: number
+    errorRate: number
+    p50Ms: number
+    p99Ms: number
+    throughputRps: number
+    servicesTotal: number
+    servicesUp: number
+    servicesDown: number
+  }
+  throughput: { time: string; timestamp: string; value: number }[]
+  services: ApiServiceHealth[]
+  alerts: ApiAlert[]
+}
+
+export interface ApiServiceHealth {
+  name: string
+  version?: string | null
+  environment?: string | null
+  status: string
+  rps: number
+  errorRate: number
+  p99Ms: number
+  uptime: number
+  lastSeen: string
+  totalTraces: number
+}
+
+export interface ApiAlert {
+  id: string
+  level: string
+  title: string
+  message: string
+  service: string
+  time: string
+  acknowledged: boolean
+}
+
+export interface ApiThroughputSeries {
+  range: string
+  windowSeconds: number
+  bucketSeconds: number
+  points: { time: string; timestamp: string; value: number }[]
+}

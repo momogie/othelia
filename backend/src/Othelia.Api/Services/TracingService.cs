@@ -7,6 +7,8 @@ namespace Othelia.Api.Services;
 
 public sealed class TracingService : ITracingService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly ITelemetryStore _store;
     private readonly TracingOptions _options;
 
@@ -32,19 +34,21 @@ public sealed class TracingService : ITracingService
         }).ToList();
     }
 
-    public async Task<IReadOnlyList<TraceSummaryDto>> GetTracesAsync(
-        string? service = null,
-        string? traceId = null,
-        int? limit = null,
+    public async Task<TraceQueryResult> GetTracesAsync(
+        TraceQuery query,
         CancellationToken ct = default)
     {
-        var from = DateTime.UtcNow.AddSeconds(-_options.Query.DefaultLookbackSeconds);
-        var max = Math.Min(limit ?? _options.Query.MaxTracesPerRequest, _options.Query.MaxTracesPerRequest);
-        var effectiveTraceId = string.IsNullOrWhiteSpace(traceId) ? null : traceId;
+        var effectiveQuery = query with
+        {
+            FromUtc = query.FromUtc ?? DateTime.UtcNow.AddSeconds(-_options.Query.DefaultLookbackSeconds),
+            SlowThresholdMs = query.SlowThresholdMs ?? _options.Query.SlowThresholdMs,
+            Limit = Math.Clamp(query.Limit > 0 ? query.Limit : _options.Query.MaxTracesPerRequest,
+                1, _options.Query.MaxTracesPerRequest),
+        };
 
-        var rows = await _store.QueryRecentTracesAsync(service, effectiveTraceId, from, max, ct);
+        var rows = await _store.QueryRecentTracesAsync(effectiveQuery, ct);
 
-        return rows.Select(r => new TraceSummaryDto
+        var items = rows.Select(r => new TraceSummaryDto
         {
             TraceId = r.TraceId,
             Name = string.IsNullOrEmpty(r.RootName) ? "(untitled)" : r.RootName,
@@ -55,6 +59,8 @@ public sealed class TracingService : ITracingService
             Status = r.HasError ? "error" : "ok",
             Tags = r.Tags?.Split(',', StringSplitOptions.RemoveEmptyEntries),
         }).ToList();
+
+        return new TraceQueryResult { Items = items, Total = rows.FirstOrDefault()?.Total ?? 0 };
     }
 
     public async Task<IReadOnlyList<SpanDto>> GetSpansAsync(string traceId, CancellationToken ct = default)
@@ -82,7 +88,7 @@ public sealed class TracingService : ITracingService
         if (string.IsNullOrEmpty(json))
             return null;
 
-        var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
+        var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JsonOptions);
         return parsed?.ToDictionary(kv => kv.Key, kv => ValueToString(kv.Value));
     }
 
@@ -91,7 +97,7 @@ public sealed class TracingService : ITracingService
         if (string.IsNullOrEmpty(json))
             return null;
 
-        var parsed = JsonSerializer.Deserialize<List<EventJson>>(json);
+        var parsed = JsonSerializer.Deserialize<List<EventJson>>(json, JsonOptions);
         return parsed?.Select(e => new SpanEventDto
         {
             Name = e.Name ?? "(event)",

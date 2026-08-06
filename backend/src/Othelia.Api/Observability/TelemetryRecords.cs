@@ -37,6 +37,7 @@ public sealed record TraceRow
     public string? HttpPath { get; init; }
     public int? HttpStatusCode { get; init; }
     public string? Tags { get; init; }
+    public required int Total { get; init; }
 }
 
 public sealed record ServiceRow
@@ -47,4 +48,33 @@ public sealed record ServiceRow
     public required long TotalTraces { get; init; }
     public required long ErrorCount { get; init; }
     public required DateTime LastSeenUtc { get; init; }
+}
+
+public sealed record DashboardAggregate
+{
+    public required long TotalTraces { get; init; }
+    public required long TotalSpans { get; init; }
+    public required long ErrorTraces { get; init; }
+    public double? P50Us { get; init; }
+    public double? P99Us { get; init; }
+    public required IReadOnlyList<ThroughputBucketRow> Throughput { get; init; }
+    public required IReadOnlyList<ServiceStatsRow> ServiceStats { get; init; }
+}
+
+public sealed record ThroughputBucketRow
+{
+    public required int BucketIndex { get; init; }
+    public required long Count { get; init; }
+}
+
+public sealed record ServiceStatsRow
+{
+    public required string ServiceName { get; init; }
+    public string? ServiceVersion { get; init; }
+    public string? ServiceEnvironment { get; init; }
+    public required long TotalTraces { get; init; }
+    public required long TotalSpans { get; init; }
+    public required long ErrorSpans { get; init; }
+    public required DateTime LastSeenUtc { get; init; }
+    public double? P99Us { get; init; }
 }

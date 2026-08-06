@@ -1,3 +1,7 @@
+// appsettings.json.example — Othelia.Api (dashboard + OTLP receiver)
+// Salin menjadi appsettings.json lalu isi nilai <...>.
+// Jika AppAPI di server terpisah: set Tracing:Receiver:Host = "0.0.0.0" + buka firewall port 4318.
+
 {
   "Logging": {
     "LogLevel": {
@@ -6,14 +10,15 @@
     }
   },
   "AllowedHosts": "*",
+
   "Tracing": {
     "Ingestion": {
       "Enabled": true,
-      "Endpoint": "http://localhost:4318"
+      "Endpoint": "http://0.0.0.0:4318"
     },
     "Storage": {
       "Provider": "SqlServer",
-      "ConnectionString": "Server=.;Database=othelia;User Id=sa;Password=pass@word1;TrustServerCertificate=True;"
+      "ConnectionString": "Server=<sql-host>;Database=othelia;User Id=<user>;Password=<pass>;TrustServerCertificate=True;"
     },
     "Query": {
       "MaxTracesPerRequest": 100,
@@ -27,11 +32,11 @@
       "Port": 5007
     },
     "Receiver": {
-      "Host": "localhost",
+      "Host": "0.0.0.0",
       "Port": 4318
     },
     "Retention": {
-      "Enabled": false,
+      "Enabled": true,
       "RetentionDays": 7,
       "CleanupIntervalHours": 24
     }
