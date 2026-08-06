@@ -62,4 +62,5 @@ public sealed record AlertDto
     public required string Service { get; init; }
     public required DateTimeOffset Time { get; init; }
     public required bool Acknowledged { get; init; }
+    public string? TraceId { get; init; }
 }

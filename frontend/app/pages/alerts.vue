@@ -23,6 +23,10 @@ function relativeTime(iso: string): string {
   return `${Math.floor(h / 24)}d ago`
 }
 
+function openTrace(alert: ApiAlert) {
+  if (alert.traceId) navigateTo(`/traces/${alert.traceId}`)
+}
+
 async function refresh() {
   loading.value = true
   try {
@@ -64,7 +68,8 @@ watch(selectedService, refresh)
           v-for="alert in alerts"
           :key="alert.id"
           class="alert-item"
-          :class="[alertLevelClass(alert.level), { 'alert-acked': alert.acknowledged }]"
+          :class="[alertLevelClass(alert.level), { 'alert-acked': alert.acknowledged }, { 'alert-linkable': alert.traceId }]"
+          @click="openTrace(alert)"
         >
           <div class="ai-head">
             <span class="ai-level-badge" :class="`ai-${alert.level}`">{{ alert.level.toUpperCase() }}</span>
@@ -74,7 +79,8 @@ watch(selectedService, refresh)
           <div class="ai-message">{{ alert.message }}</div>
           <div class="ai-foot">
             <span class="ai-service">{{ alert.service }}</span>
-            <button v-if="!alert.acknowledged" class="ai-ack" @click="acknowledge(alert.id)">Ack</button>
+            <span v-if="alert.traceId" class="ai-trace-link">View trace →</span>
+            <button v-if="!alert.acknowledged" class="ai-ack" @click.stop="acknowledge(alert.id)">Ack</button>
             <span v-else class="ai-acked-label">✓ Acknowledged</span>
           </div>
         </div>

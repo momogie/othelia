@@ -169,6 +169,7 @@ public sealed class DashboardService : IDashboardService
                 Message = $"{t.RootService} finished in error ({t.SpanCount} spans, {FormatDuration(t.DurationUs / 1000.0)})",
                 Service = string.IsNullOrEmpty(t.RootService) ? "unknown" : t.RootService,
                 Time = new DateTimeOffset(t.StartTimeUtc, TimeSpan.Zero),
+                TraceId = t.TraceId,
                 Acknowledged = ackState.TryGetValue(key, out var ack) && ack,
             });
         }
@@ -185,6 +186,7 @@ public sealed class DashboardService : IDashboardService
                 Message = $"{t.RootService} took {FormatDuration(t.DurationUs / 1000.0)} (threshold {slowThresholdMs}ms)",
                 Service = string.IsNullOrEmpty(t.RootService) ? "unknown" : t.RootService,
                 Time = new DateTimeOffset(t.StartTimeUtc, TimeSpan.Zero),
+                TraceId = t.TraceId,
                 Acknowledged = ackState.TryGetValue(key, out var ack) && ack,
             });
         }

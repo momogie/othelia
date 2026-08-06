@@ -135,7 +135,7 @@ export function useTracing() {
     if (!trace) {
       try {
         const list = await $fetch<ApiTraceSummary[]>(
-          `/api/traces?traceId=${encodeURIComponent(id)}&limit=1`,
+          `/api/traces?traceId=${encodeURIComponent(id)}&limit=1&from=${encodeURIComponent(new Date(Date.now() - 7 * 86400000).toISOString())}`,
         )
         const first = list?.[0]
         if (!first) return null

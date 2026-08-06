@@ -87,6 +87,7 @@ export interface ApiAlert {
   service: string
   time: string
   acknowledged: boolean
+  traceId?: string | null
 }
 
 export interface ApiLog {

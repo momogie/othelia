@@ -28,7 +28,7 @@
       "Enabled": true,
       "Endpoint": "http://0.0.0.0:4318",
       // Kosongkan untuk menerima tanpa auth. Isi token agar /v1/* menolak kiriman tanpa X-Otlp-Token yang sama.
-      "ApiKey": "",
+      "ApiKey": "<change-me>",
       "MaxPayloadBytes": 33554432
     },
     "Storage": {

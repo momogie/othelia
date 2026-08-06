@@ -739,6 +739,8 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
   border-left: 3px solid transparent; transition: opacity 0.2s;
 }
 .alert-item.alert-acked { opacity: 0.5; }
+.alert-item.alert-linkable { cursor: pointer; }
+.alert-item.alert-linkable:hover { background: var(--surface3); border-left-width: 4px; }
 .alert-error { background: rgba(231,76,60,0.06); border-left-color: var(--red); }
 .alert-warning { background: rgba(245,166,35,0.06); border-left-color: var(--yellow); }
 .alert-info { background: rgba(74,158,255,0.04); border-left-color: var(--blue); }
@@ -753,6 +755,7 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
 .ai-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 3px; }
 .ai-message { font-size: 11px; color: var(--text2); line-height: 1.4; margin-bottom: 6px; }
 .ai-bottom { display: flex; align-items: center; justify-content: space-between; }
+.ai-foot { display: flex; align-items: center; gap: 8px; }
 .ai-service {
   font-size: 10px; font-weight: 500; color: var(--blue);
   background: rgba(74,158,255,0.12); padding: 1px 6px; border-radius: 4px;
@@ -764,6 +767,7 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
 }
 .ai-ack:hover { color: var(--accent); border-color: var(--accent); }
 .ai-acked-label { font-size: 9.5px; color: var(--green); font-weight: 500; }
+.ai-trace-link { font-size: 9.5px; color: var(--accent); font-weight: 600; margin-left: auto; }
 
 /* ── RECENT TRACES ── */
 .recent-traces-list { padding: 4px 0; }
