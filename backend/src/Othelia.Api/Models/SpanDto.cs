@@ -12,5 +12,14 @@ public sealed record SpanDto
     public TimeSpan Duration { get; init; }
     public string? Status { get; init; }
     public IReadOnlyDictionary<string, string>? Attributes { get; init; }
+    public IReadOnlyDictionary<string, string>? ResourceAttributes { get; init; }
     public IReadOnlyList<SpanEventDto>? Events { get; init; }
+    public IReadOnlyList<SpanLinkDto>? Links { get; init; }
+}
+
+public sealed record SpanLinkDto
+{
+    public required string TraceId { get; init; }
+    public required string SpanId { get; init; }
+    public IReadOnlyDictionary<string, string>? Attributes { get; init; }
 }

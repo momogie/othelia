@@ -42,10 +42,26 @@ public sealed class SettingsController : ControllerBase
     {
         if (patch.QueryMaxTracesPerRequest is < 1)
             return "QueryMaxTracesPerRequest must be at least 1.";
+        if (patch.QueryMaxSpansPerTrace is < 1)
+            return "QueryMaxSpansPerTrace must be at least 1.";
         if (patch.QueryDefaultLookbackSeconds is < 0)
             return "QueryDefaultLookbackSeconds must not be negative.";
         if (patch.QuerySlowThresholdMs is < 1)
             return "QuerySlowThresholdMs must be at least 1.";
+        if (patch.AlertsMaxAlerts is < 1)
+            return "AlertsMaxAlerts must be at least 1.";
+        if (patch.AlertsErrorRateDownThreshold is < 0)
+            return "AlertsErrorRateDownThreshold must not be negative.";
+        if (patch.MetricsDefaultBucketSeconds is < 1)
+            return "MetricsDefaultBucketSeconds must be at least 1.";
+        if (patch.MetricsMaxSeriesPoints is < 1)
+            return "MetricsMaxSeriesPoints must be at least 1.";
+        if (patch.ServiceMapWindowSeconds is < 1)
+            return "ServiceMapWindowSeconds must be at least 1.";
+        if (patch.CollectorsWindowSeconds is < 1)
+            return "CollectorsWindowSeconds must be at least 1.";
+        if (patch.CollectorsStaleMinutes is < 1)
+            return "CollectorsStaleMinutes must be at least 1.";
         if (patch.RetentionDays is < 0)
             return "RetentionDays must not be negative.";
         if (patch.RetentionCleanupIntervalHours is < 1)

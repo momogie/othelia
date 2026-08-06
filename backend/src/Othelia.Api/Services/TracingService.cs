@@ -70,7 +70,8 @@ public sealed class TracingService : ITracingService
 
     public async Task<IReadOnlyList<SpanDto>> GetSpansAsync(string traceId, CancellationToken ct = default)
     {
-        var rows = await _store.QuerySpansAsync(traceId, ct);
+        var opts = await _resolver.ResolveAsync(ct);
+        var rows = await _store.QuerySpansAsync(traceId, Math.Max(1, opts.Query.MaxSpansPerTrace), ct);
 
         return rows.Select(s => new SpanDto
         {
@@ -84,7 +85,9 @@ public sealed class TracingService : ITracingService
             Duration = TimeSpan.FromMilliseconds(s.DurationUs / 1000.0),
             Status = s.StatusCode,
             Attributes = DeserializeAttributes(s.AttributesJson),
+            ResourceAttributes = DeserializeAttributes(s.ResourceJson),
             Events = DeserializeEvents(s.EventsJson),
+            Links = DeserializeLinks(s.LinksJson),
         }).ToList();
     }
 
@@ -139,6 +142,20 @@ public sealed class TracingService : ITracingService
         }).ToList();
     }
 
+    private static IReadOnlyList<SpanLinkDto>? DeserializeLinks(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return null;
+
+        var parsed = JsonSerializer.Deserialize<List<LinkJson>>(json, JsonOptions);
+        return parsed?.Select(l => new SpanLinkDto
+        {
+            TraceId = l.TraceId ?? string.Empty,
+            SpanId = l.SpanId ?? string.Empty,
+            Attributes = l.Attributes?.ToDictionary(kv => kv.Key, kv => ValueToString(kv.Value)),
+        }).ToList();
+    }
+
     private static string ValueToString(object? value) => value switch
     {
         JsonElement element => element.ValueKind switch
@@ -159,6 +176,13 @@ public sealed class TracingService : ITracingService
     {
         public string? Name { get; set; }
         public DateTime TimeUtc { get; set; }
+        public Dictionary<string, object?>? Attributes { get; set; }
+    }
+
+    private sealed class LinkJson
+    {
+        public string? TraceId { get; set; }
+        public string? SpanId { get; set; }
         public Dictionary<string, object?>? Attributes { get; set; }
     }
 }

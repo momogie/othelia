@@ -75,6 +75,7 @@ public static class OtlpEndpoints
 
     private static async Task<IResult> HandleMetricsAsync(
         HttpContext context,
+        ITelemetryStore store,
         ITracingOptionsResolver resolver,
         ILoggerFactory loggerFactory)
     {
@@ -87,8 +88,15 @@ public static class OtlpEndpoints
                 return Results.Problem("Invalid or missing OTLP API token.", statusCode: StatusCodes.Status401Unauthorized);
 
             var request = await ReadRequestAsync<ExportMetricsServiceRequest>(context.Request, options.Ingestion.MaxPayloadBytes, context.RequestAborted);
-            var count = request.ResourceMetrics.Sum(rm => rm.ScopeMetrics.Sum(sm => sm.Metrics.Count));
-            logger.LogDebug("Received {Count} metrics (not persisted in Phase 1).", count);
+            var metrics = OtlpMetricConverter.ConvertRequest(request);
+
+            if (!options.Ingestion.Enabled || !options.Metrics.Enabled)
+            {
+                logger.LogDebug("Metric ingestion disabled; accepted and dropped {Count} points.", metrics.Count);
+                return Results.Bytes(Array.Empty<byte>(), "application/x-protobuf");
+            }
+
+            await store.InsertMetricsAsync(metrics, context.RequestAborted);
             return Results.Bytes(Array.Empty<byte>(), "application/x-protobuf");
         }
         catch (UnsupportedContentTypeException ex)

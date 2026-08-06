@@ -51,8 +51,9 @@ public sealed class RetentionService : BackgroundService
         var cutoff = DateTime.UtcNow.AddDays(-options.Retention.RetentionDays);
         var deletedSpans = await _store.DeleteSpansOlderThanAsync(cutoff, ct);
         var deletedLogs = await _store.DeleteLogsOlderThanAsync(cutoff, ct);
-        if (deletedSpans > 0 || deletedLogs > 0)
-            _logger.LogInformation("Retention cleanup deleted {Spans} spans and {Logs} logs older than {Days} days.",
-                deletedSpans, deletedLogs, options.Retention.RetentionDays);
+        var deletedMetrics = await _store.DeleteMetricsOlderThanAsync(cutoff, ct);
+        if (deletedSpans > 0 || deletedLogs > 0 || deletedMetrics > 0)
+            _logger.LogInformation("Retention cleanup deleted {Spans} spans, {Logs} logs, and {Metrics} metric points older than {Days} days.",
+                deletedSpans, deletedLogs, deletedMetrics, options.Retention.RetentionDays);
     }
 }

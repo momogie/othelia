@@ -37,10 +37,28 @@
     },
     "Query": {
       "MaxTracesPerRequest": 100,
+      "MaxSpansPerTrace": 5000,
       "DefaultLookbackSeconds": 3600,
       "SlowThresholdMs": 1000,
       "DashboardWindowSeconds": 86400,
       "DashboardBuckets": 24
+    },
+    "Alerts": {
+      "Enabled": true,
+      "MaxAlerts": 10,
+      "ErrorRateDownThreshold": 5.0
+    },
+    "Metrics": {
+      "Enabled": true,
+      "DefaultBucketSeconds": 60,
+      "MaxSeriesPoints": 1000
+    },
+    "ServiceMap": {
+      "WindowSeconds": 86400
+    },
+    "Collectors": {
+      "WindowSeconds": 3600,
+      "StaleMinutes": 5
     },
     "Api": {
       "Host": "localhost",

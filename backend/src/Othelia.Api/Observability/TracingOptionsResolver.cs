@@ -9,8 +9,18 @@ public sealed class TracingSettingsPatch
     public string? IngestionEndpoint { get; set; }
     public List<IngestionFilterRule>? IngestionRules { get; set; }
     public int? QueryMaxTracesPerRequest { get; set; }
+    public int? QueryMaxSpansPerTrace { get; set; }
     public int? QueryDefaultLookbackSeconds { get; set; }
     public int? QuerySlowThresholdMs { get; set; }
+    public bool? AlertsEnabled { get; set; }
+    public int? AlertsMaxAlerts { get; set; }
+    public double? AlertsErrorRateDownThreshold { get; set; }
+    public bool? MetricsEnabled { get; set; }
+    public int? MetricsDefaultBucketSeconds { get; set; }
+    public int? MetricsMaxSeriesPoints { get; set; }
+    public int? ServiceMapWindowSeconds { get; set; }
+    public int? CollectorsWindowSeconds { get; set; }
+    public int? CollectorsStaleMinutes { get; set; }
     public bool? RetentionEnabled { get; set; }
     public int? RetentionDays { get; set; }
     public int? RetentionCleanupIntervalHours { get; set; }
@@ -111,10 +121,30 @@ public sealed class TracingOptionsResolver : ITracingOptionsResolver
             options.Ingestion.Rules = patch.IngestionRules;
         if (patch.QueryMaxTracesPerRequest.HasValue)
             options.Query.MaxTracesPerRequest = patch.QueryMaxTracesPerRequest.Value;
+        if (patch.QueryMaxSpansPerTrace.HasValue)
+            options.Query.MaxSpansPerTrace = patch.QueryMaxSpansPerTrace.Value;
         if (patch.QueryDefaultLookbackSeconds.HasValue)
             options.Query.DefaultLookbackSeconds = patch.QueryDefaultLookbackSeconds.Value;
         if (patch.QuerySlowThresholdMs.HasValue)
             options.Query.SlowThresholdMs = patch.QuerySlowThresholdMs.Value;
+        if (patch.AlertsEnabled.HasValue)
+            options.Alerts.Enabled = patch.AlertsEnabled.Value;
+        if (patch.AlertsMaxAlerts.HasValue)
+            options.Alerts.MaxAlerts = patch.AlertsMaxAlerts.Value;
+        if (patch.AlertsErrorRateDownThreshold.HasValue)
+            options.Alerts.ErrorRateDownThreshold = patch.AlertsErrorRateDownThreshold.Value;
+        if (patch.MetricsEnabled.HasValue)
+            options.Metrics.Enabled = patch.MetricsEnabled.Value;
+        if (patch.MetricsDefaultBucketSeconds.HasValue)
+            options.Metrics.DefaultBucketSeconds = patch.MetricsDefaultBucketSeconds.Value;
+        if (patch.MetricsMaxSeriesPoints.HasValue)
+            options.Metrics.MaxSeriesPoints = patch.MetricsMaxSeriesPoints.Value;
+        if (patch.ServiceMapWindowSeconds.HasValue)
+            options.ServiceMap.WindowSeconds = patch.ServiceMapWindowSeconds.Value;
+        if (patch.CollectorsWindowSeconds.HasValue)
+            options.Collectors.WindowSeconds = patch.CollectorsWindowSeconds.Value;
+        if (patch.CollectorsStaleMinutes.HasValue)
+            options.Collectors.StaleMinutes = patch.CollectorsStaleMinutes.Value;
         if (patch.RetentionEnabled.HasValue)
             options.Retention.Enabled = patch.RetentionEnabled.Value;
         if (patch.RetentionDays.HasValue)

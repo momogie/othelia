@@ -6,6 +6,7 @@ obj/
 .vs/
 **/Properties/launchSettings.json
 *.user
+backend/src/Othelia.Api/appsettings.json
 
 # ===== Node / Nuxt =====
 node_modules/

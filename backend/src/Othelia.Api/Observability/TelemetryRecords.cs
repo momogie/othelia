@@ -121,3 +121,81 @@ public sealed record LogQuery
     public int Offset { get; init; }
     public string? Sort { get; init; }
 }
+
+public sealed record MetricRecord
+{
+    public required DateTime TimestampUtc { get; init; }
+    public required string ServiceName { get; init; }
+    public string? ServiceVersion { get; init; }
+    public string? ServiceEnvironment { get; init; }
+    public required string Name { get; init; }
+    public required string Type { get; init; }
+    public string? Unit { get; init; }
+    public required double Value { get; init; }
+    public long? Count { get; init; }
+    public string? AttributesJson { get; init; }
+    public string? ResourceJson { get; init; }
+}
+
+public sealed record MetricNameRow
+{
+    public required string Name { get; init; }
+    public string? Unit { get; init; }
+    public required long DataPoints { get; init; }
+    public required DateTime LastSeenUtc { get; init; }
+}
+
+public sealed record MetricPointRow
+{
+    public required DateTime TimestampUtc { get; init; }
+    public required double Value { get; init; }
+}
+
+public sealed record MetricQuery
+{
+    public string? Service { get; init; }
+    public DateTime? FromUtc { get; init; }
+    public DateTime? ToUtc { get; init; }
+    public int BucketSeconds { get; init; } = 60;
+    public string Aggregation { get; init; } = "avg";
+    public int Limit { get; init; } = 100;
+}
+
+public sealed record ServiceMapNodeRow
+{
+    public required string ServiceName { get; init; }
+    public string? ServiceVersion { get; init; }
+    public string? ServiceEnvironment { get; init; }
+    public required long TotalTraces { get; init; }
+    public required long ErrorSpans { get; init; }
+    public required DateTime LastSeenUtc { get; init; }
+}
+
+public sealed record ServiceMapResult
+{
+    public required IReadOnlyList<ServiceMapNodeRow> Nodes { get; init; }
+    public required IReadOnlyList<ServiceMapEdgeRow> Edges { get; init; }
+}
+
+public sealed record ServiceMapEdgeRow
+{
+    public required string Source { get; init; }
+    public required string Target { get; init; }
+    public required long CallCount { get; init; }
+}
+
+public sealed record CollectorRow
+{
+    public required string ServiceName { get; init; }
+    public string? ServiceVersion { get; init; }
+    public string? ServiceEnvironment { get; init; }
+    public required long TotalTraces { get; init; }
+    public required long ErrorSpans { get; init; }
+    public required DateTime LastSeenUtc { get; init; }
+}
+
+public sealed record AlertStateRow
+{
+    public required string AlertKey { get; init; }
+    public required bool Acknowledged { get; init; }
+}

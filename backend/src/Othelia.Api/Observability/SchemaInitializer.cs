@@ -78,6 +78,39 @@ BEGIN
 
     CREATE INDEX IX_Logs_TimestampUtc ON dbo.Logs (TimestampUtc) INCLUDE (ServiceName, SeverityText);
     CREATE INDEX IX_Logs_ServiceName_TimestampUtc ON dbo.Logs (ServiceName, TimestampUtc);
+END;
+
+IF OBJECT_ID(N'dbo.Metrics', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Metrics
+    (
+        Id                BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Metrics PRIMARY KEY,
+        TimestampUtc      DATETIME2(3)   NOT NULL,
+        ServiceName       NVARCHAR(255)  NOT NULL,
+        ServiceVersion    NVARCHAR(64)   NULL,
+        ServiceEnvironment NVARCHAR(64)  NULL,
+        [Name]            NVARCHAR(255)  NOT NULL,
+        [Type]            NVARCHAR(16)   NOT NULL,
+        Unit              NVARCHAR(64)   NULL,
+        Value             FLOAT          NOT NULL,
+        [Count]           BIGINT         NULL,
+        AttributesJson    NVARCHAR(MAX)  NULL,
+        ResourceJson      NVARCHAR(MAX)  NULL
+    );
+
+    CREATE INDEX IX_Metrics_TimestampUtc ON dbo.Metrics (TimestampUtc) INCLUDE (ServiceName, [Name]);
+    CREATE INDEX IX_Metrics_Name_TimestampUtc ON dbo.Metrics ([Name], TimestampUtc) INCLUDE (ServiceName);
+END;
+
+IF OBJECT_ID(N'dbo.AlertState', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.AlertState
+    (
+        AlertKey         NVARCHAR(200)   NOT NULL CONSTRAINT PK_AlertState PRIMARY KEY,
+        Acknowledged     BIT             NOT NULL CONSTRAINT DF_AlertState_Ack DEFAULT (0),
+        AcknowledgedAtUtc DATETIME2(3)   NULL,
+        UpdatedAtUtc     DATETIME2(3)    NOT NULL
+    );
 END;";
 
         await using var connection = new SqlConnection(_connectionString);

@@ -8,7 +8,7 @@ public interface ITelemetryStore
 {
     Task InsertSpansAsync(IReadOnlyList<SpanRecord> spans, CancellationToken ct);
     Task<IReadOnlyList<TraceRow>> QueryRecentTracesAsync(TraceQuery query, CancellationToken ct);
-    Task<IReadOnlyList<SpanRecord>> QuerySpansAsync(string traceId, CancellationToken ct);
+    Task<IReadOnlyList<SpanRecord>> QuerySpansAsync(string traceId, int maxRows, CancellationToken ct);
     Task<IReadOnlyList<ServiceRow>> QueryServicesAsync(DateTime fromUtc, CancellationToken ct);
     Task<DashboardAggregate> QueryDashboardAggregateAsync(DateTime fromUtc, int bucketSeconds, string? service, CancellationToken ct);
     Task<IReadOnlyList<ThroughputBucketRow>> QueryThroughputAsync(DateTime fromUtc, int bucketSeconds, string? service, CancellationToken ct);
@@ -17,6 +17,14 @@ public interface ITelemetryStore
     Task<IReadOnlyList<LogRow>> QueryLogsAsync(LogQuery query, CancellationToken ct);
     Task<long> DeleteLogsOlderThanAsync(DateTime olderThanUtc, CancellationToken ct);
     Task<bool> IsHealthyAsync(CancellationToken ct);
+    Task InsertMetricsAsync(IReadOnlyList<MetricRecord> metrics, CancellationToken ct);
+    Task<IReadOnlyList<MetricNameRow>> QueryMetricNamesAsync(DateTime fromUtc, string? service, CancellationToken ct);
+    Task<IReadOnlyList<MetricPointRow>> QueryMetricPointsAsync(string metricName, string? service, MetricQuery query, CancellationToken ct);
+    Task<long> DeleteMetricsOlderThanAsync(DateTime olderThanUtc, CancellationToken ct);
+    Task<ServiceMapResult> QueryServiceMapAsync(DateTime fromUtc, string? service, CancellationToken ct);
+    Task<IReadOnlyList<CollectorRow>> QueryCollectorsAsync(DateTime fromUtc, CancellationToken ct);
+    Task<IReadOnlyList<AlertStateRow>> GetAlertStatesAsync(CancellationToken ct);
+    Task AcknowledgeAlertAsync(string alertKey, CancellationToken ct);
 }
 
 public sealed class TelemetryStore : ITelemetryStore
@@ -391,10 +399,10 @@ FROM dbo.Logs";
         .Replace("_", "~_")
         .Replace("[", "~[");
 
-    public async Task<IReadOnlyList<SpanRecord>> QuerySpansAsync(string traceId, CancellationToken ct)
+    public async Task<IReadOnlyList<SpanRecord>> QuerySpansAsync(string traceId, int maxRows, CancellationToken ct)
     {
         const string sql = @"
-SELECT TOP (5000) TraceId, SpanId, ParentSpanId, [Name], ServiceName, Kind,
+SELECT TOP (@MaxRows) TraceId, SpanId, ParentSpanId, [Name], ServiceName, Kind,
        StartTimeUtc, EndTimeUtc, DurationUs, StatusCode, StatusMessage,
        HttpMethod, HttpPath, HttpStatusCode,
        ServiceVersion, ServiceEnvironment,
@@ -405,8 +413,231 @@ ORDER BY StartTimeUtc;";
 
         await using var connection = OpenConnection();
         var rows = await connection.QueryAsync<SpanRecord>(new CommandDefinition(sql,
-            new { TraceId = traceId }, cancellationToken: ct));
+            new { TraceId = traceId, MaxRows = Math.Max(1, maxRows) }, cancellationToken: ct));
         return rows.ToList();
+    }
+
+    public async Task InsertMetricsAsync(IReadOnlyList<MetricRecord> metrics, CancellationToken ct)
+    {
+        if (metrics.Count == 0)
+            return;
+
+        var table = new DataTable();
+        table.Columns.Add("TimestampUtc", typeof(DateTime));
+        table.Columns.Add("ServiceName", typeof(string));
+        table.Columns.Add("ServiceVersion", typeof(string));
+        table.Columns.Add("ServiceEnvironment", typeof(string));
+        table.Columns.Add("Name", typeof(string));
+        table.Columns.Add("Type", typeof(string));
+        table.Columns.Add("Unit", typeof(string));
+        table.Columns.Add("Value", typeof(double));
+        table.Columns.Add("Count", typeof(long));
+        table.Columns.Add("AttributesJson", typeof(string));
+        table.Columns.Add("ResourceJson", typeof(string));
+
+        foreach (var m in metrics)
+        {
+            var row = table.NewRow();
+            row["TimestampUtc"] = m.TimestampUtc;
+            row["ServiceName"] = m.ServiceName;
+            row["ServiceVersion"] = (object?)m.ServiceVersion ?? DBNull.Value;
+            row["ServiceEnvironment"] = (object?)m.ServiceEnvironment ?? DBNull.Value;
+            row["Name"] = m.Name;
+            row["Type"] = m.Type;
+            row["Unit"] = (object?)m.Unit ?? DBNull.Value;
+            row["Value"] = m.Value;
+            row["Count"] = (object?)m.Count ?? DBNull.Value;
+            row["AttributesJson"] = (object?)m.AttributesJson ?? DBNull.Value;
+            row["ResourceJson"] = (object?)m.ResourceJson ?? DBNull.Value;
+            table.Rows.Add(row);
+        }
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct);
+        using var bulk = new SqlBulkCopy(connection)
+        {
+            DestinationTableName = "dbo.Metrics",
+            BatchSize = 1000,
+        };
+        foreach (DataColumn column in table.Columns)
+            bulk.ColumnMappings.Add(column.ColumnName, column.ColumnName);
+        await bulk.WriteToServerAsync(table, ct);
+    }
+
+    public async Task<IReadOnlyList<MetricNameRow>> QueryMetricNamesAsync(
+        DateTime fromUtc, string? service, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT [Name], MAX(Unit) AS Unit, COUNT(*) AS DataPoints, MAX(TimestampUtc) AS LastSeenUtc
+FROM dbo.Metrics
+WHERE TimestampUtc >= @FromUtc
+  AND (@Service IS NULL OR ServiceName = @Service)
+GROUP BY [Name]
+ORDER BY LastSeenUtc DESC;";
+
+        await using var connection = OpenConnection();
+        var rows = await connection.QueryAsync<MetricNameRow>(new CommandDefinition(sql,
+            new { FromUtc = fromUtc, Service = service }, cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<MetricPointRow>> QueryMetricPointsAsync(
+        string metricName, string? service, MetricQuery query, CancellationToken ct)
+    {
+        var bucketSeconds = Math.Max(1, query.BucketSeconds);
+        var bucketSql = query.Aggregation.ToLowerInvariant() switch
+        {
+            "min" => "MIN(Value)",
+            "max" => "MAX(Value)",
+            "sum" => "SUM(Value)",
+            "last" => null,
+            _ => "AVG(Value)",
+        };
+
+        const string aggregateTemplate = @"
+;WITH Buckets AS (
+    SELECT DATEDIFF(SECOND, @FromUtc, TimestampUtc) / @BucketSeconds AS BucketIndex,
+           TimestampUtc, Value
+    FROM dbo.Metrics
+    WHERE [Name] = @Name
+      AND TimestampUtc >= @FromUtc
+      AND (@ToUtc IS NULL OR TimestampUtc <= @ToUtc)
+      AND (@Service IS NULL OR ServiceName = @Service)
+)
+SELECT BucketIndex, DATEADD(SECOND, BucketIndex * @BucketSeconds, @FromUtc) AS TimestampUtc, {expr} AS Value
+FROM Buckets
+GROUP BY BucketIndex
+ORDER BY BucketIndex;";
+
+        const string lastTemplate = @"
+;WITH Buckets AS (
+    SELECT DATEDIFF(SECOND, @FromUtc, TimestampUtc) / @BucketSeconds AS BucketIndex,
+           TimestampUtc, Value
+    FROM dbo.Metrics
+    WHERE [Name] = @Name
+      AND TimestampUtc >= @FromUtc
+      AND (@ToUtc IS NULL OR TimestampUtc <= @ToUtc)
+      AND (@Service IS NULL OR ServiceName = @Service)
+),
+Ranked AS (
+    SELECT BucketIndex, TimestampUtc, Value,
+           ROW_NUMBER() OVER (PARTITION BY BucketIndex ORDER BY TimestampUtc DESC) AS rn
+    FROM Buckets
+)
+SELECT BucketIndex, DATEADD(SECOND, BucketIndex * @BucketSeconds, @FromUtc) AS TimestampUtc, Value
+FROM Ranked
+WHERE rn = 1
+ORDER BY BucketIndex;";
+
+        var sql = bucketSql is null ? lastTemplate : aggregateTemplate.Replace("{expr}", bucketSql);
+
+        await using var connection = OpenConnection();
+        var rows = await connection.QueryAsync<MetricPointRow>(new CommandDefinition(sql,
+            new
+            {
+                Name = metricName,
+                Service = service,
+                FromUtc = query.FromUtc,
+                ToUtc = query.ToUtc,
+                BucketSeconds = bucketSeconds,
+            }, cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    public async Task<long> DeleteMetricsOlderThanAsync(DateTime olderThanUtc, CancellationToken ct)
+    {
+        const string sql = "DELETE TOP (@BatchSize) FROM dbo.Metrics WHERE TimestampUtc < @OlderThanUtc;";
+        await using var connection = OpenConnection();
+        const int batch = 5000;
+        long total = 0;
+        while (!ct.IsCancellationRequested)
+        {
+            var deleted = await connection.ExecuteAsync(new CommandDefinition(sql,
+                new { OlderThanUtc = olderThanUtc, BatchSize = batch }, cancellationToken: ct));
+            total += deleted;
+            if (deleted < batch)
+                break;
+        }
+        return total;
+    }
+
+    public async Task<ServiceMapResult> QueryServiceMapAsync(DateTime fromUtc, string? service, CancellationToken ct)
+    {
+        const string nodesSql = @"
+SELECT ServiceName,
+       MAX(ServiceVersion) AS ServiceVersion,
+       MAX(ServiceEnvironment) AS ServiceEnvironment,
+       COUNT(DISTINCT TraceId) AS TotalTraces,
+       SUM(CASE WHEN StatusCode = N'Error' THEN 1 ELSE 0 END) AS ErrorSpans,
+       MAX(StartTimeUtc) AS LastSeenUtc
+FROM dbo.Spans
+WHERE StartTimeUtc >= @FromUtc
+  AND (@Service IS NULL OR ServiceName = @Service)
+GROUP BY ServiceName;";
+
+        const string edgesSql = @"
+;WITH ParentSvc AS (
+    SELECT s.TraceId, s.ServiceName,
+           p.ServiceName AS ParentServiceName
+    FROM dbo.Spans s
+    LEFT JOIN dbo.Spans p ON p.SpanId = s.ParentSpanId AND p.TraceId = s.TraceId
+    WHERE s.StartTimeUtc >= @FromUtc
+      AND (@Service IS NULL OR s.ServiceName = @Service)
+)
+SELECT COALESCE(ParentServiceName, N'__root__') AS [Source],
+       ServiceName AS [Target],
+       COUNT(DISTINCT TraceId) AS CallCount
+FROM ParentSvc
+GROUP BY COALESCE(ParentServiceName, N'__root__'), ServiceName;";
+
+        await using var connection = OpenConnection();
+        var nodes = await connection.QueryAsync<ServiceMapNodeRow>(new CommandDefinition(nodesSql,
+            new { FromUtc = fromUtc, Service = service }, cancellationToken: ct));
+        var edges = await connection.QueryAsync<ServiceMapEdgeRow>(new CommandDefinition(edgesSql,
+            new { FromUtc = fromUtc, Service = service }, cancellationToken: ct));
+        return new ServiceMapResult { Nodes = nodes.ToList(), Edges = edges.ToList() };
+    }
+
+    public async Task<IReadOnlyList<CollectorRow>> QueryCollectorsAsync(DateTime fromUtc, CancellationToken ct)
+    {
+        const string sql = @"
+SELECT ServiceName,
+       MAX(ServiceVersion) AS ServiceVersion,
+       MAX(ServiceEnvironment) AS ServiceEnvironment,
+       COUNT(DISTINCT TraceId) AS TotalTraces,
+       SUM(CASE WHEN StatusCode = N'Error' THEN 1 ELSE 0 END) AS ErrorSpans,
+       MAX(StartTimeUtc) AS LastSeenUtc
+FROM dbo.Spans
+WHERE StartTimeUtc >= @FromUtc
+GROUP BY ServiceName
+ORDER BY LastSeenUtc DESC;";
+
+        await using var connection = OpenConnection();
+        var rows = await connection.QueryAsync<CollectorRow>(new CommandDefinition(sql,
+            new { FromUtc = fromUtc }, cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    public async Task<IReadOnlyList<AlertStateRow>> GetAlertStatesAsync(CancellationToken ct)
+    {
+        const string sql = "SELECT AlertKey, Acknowledged FROM dbo.AlertState WHERE Acknowledged = 1;";
+        await using var connection = OpenConnection();
+        var rows = await connection.QueryAsync<AlertStateRow>(new CommandDefinition(sql, cancellationToken: ct));
+        return rows.ToList();
+    }
+
+    public async Task AcknowledgeAlertAsync(string alertKey, CancellationToken ct)
+    {
+        const string sql = @"
+MERGE dbo.AlertState WITH (HOLDLOCK) AS target
+USING (SELECT @AlertKey AS AlertKey) AS source ON target.AlertKey = source.AlertKey
+WHEN MATCHED THEN UPDATE SET Acknowledged = 1, AcknowledgedAtUtc = @Now, UpdatedAtUtc = @Now
+WHEN NOT MATCHED THEN INSERT (AlertKey, Acknowledged, AcknowledgedAtUtc, UpdatedAtUtc)
+    VALUES (@AlertKey, 1, @Now, @Now);";
+
+        await using var connection = OpenConnection();
+        await connection.ExecuteAsync(new CommandDefinition(sql,
+            new { AlertKey = alertKey, Now = DateTime.UtcNow }, cancellationToken: ct));
     }
 
     public async Task<IReadOnlyList<ServiceRow>> QueryServicesAsync(DateTime fromUtc, CancellationToken ct)

@@ -74,6 +74,7 @@ else
 builder.Services.AddSingleton<ITracingOptionsResolver, TracingOptionsResolver>();
 builder.Services.AddScoped<ITracingService, TracingService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IInsightsService, InsightsService>();
 builder.Services.AddHostedService<RetentionService>();
 
 // API + OTLP receiver binding dari config (override launchSettings/ASPNETCORE_URLS).

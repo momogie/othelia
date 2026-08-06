@@ -7,13 +7,12 @@ public interface IDashboardService
 {
     Task<DashboardDto> GetAsync(string? service, CancellationToken ct = default);
     Task<ThroughputSeriesDto> GetThroughputAsync(string? range, string? service, CancellationToken ct = default);
+    Task<IReadOnlyList<AlertDto>> GetAlertsAsync(string? service, CancellationToken ct = default);
+    Task AcknowledgeAlertAsync(string alertKey, CancellationToken ct = default);
 }
 
 public sealed class DashboardService : IDashboardService
 {
-    private const int MaxAlerts = 10;
-    private const double ErrorRateDownThreshold = 5.0;
-
     private readonly ITelemetryStore _store;
     private readonly ITracingOptionsResolver _resolver;
 
@@ -36,11 +35,11 @@ public sealed class DashboardService : IDashboardService
 
         var aggregate = await _store.QueryDashboardAggregateAsync(fromUtc, bucketSeconds, service, ct);
 
-        var alerts = await BuildAlertsAsync(fromUtc, Math.Max(1, query.SlowThresholdMs), service, ct);
+        var alerts = await BuildAlertsAsync(fromUtc, Math.Max(1, query.SlowThresholdMs), opts.Alerts, service, ct);
 
-        var metrics = BuildMetrics(aggregate, windowSeconds, Math.Max(1, query.SlowThresholdMs));
+        var metrics = BuildMetrics(aggregate, windowSeconds, Math.Max(1, query.SlowThresholdMs), opts.Alerts.ErrorRateDownThreshold);
         var throughput = BuildThroughput(aggregate, fromUtc, bucketSeconds, buckets);
-        var services = BuildServices(aggregate, windowSeconds, Math.Max(1, query.SlowThresholdMs));
+        var services = BuildServices(aggregate, windowSeconds, Math.Max(1, query.SlowThresholdMs), opts.Alerts.ErrorRateDownThreshold);
 
         return new DashboardDto
         {
@@ -54,13 +53,14 @@ public sealed class DashboardService : IDashboardService
         };
     }
 
-    private DashboardMetricsDto BuildMetrics(DashboardAggregate aggregate, int windowSeconds, int slowThresholdMs)
+    private DashboardMetricsDto BuildMetrics(
+        DashboardAggregate aggregate, int windowSeconds, int slowThresholdMs, double errorRateDownThreshold)
     {
         var totalTraces = aggregate.TotalTraces;
         var errorRate = totalTraces > 0 ? aggregate.ErrorTraces / (double)totalTraces * 100.0 : 0.0;
 
         var stats = aggregate.ServiceStats;
-        var services = BuildServices(aggregate, windowSeconds, slowThresholdMs);
+        var services = BuildServices(aggregate, windowSeconds, slowThresholdMs, errorRateDownThreshold);
         var servicesDown = services.Count(s => s.Status == "error");
         var servicesUp = services.Count - servicesDown;
 
@@ -97,14 +97,14 @@ public sealed class DashboardService : IDashboardService
     }
 
     private IReadOnlyList<ServiceHealthDto> BuildServices(
-        DashboardAggregate aggregate, int windowSeconds, int slowThresholdMs)
+        DashboardAggregate aggregate, int windowSeconds, int slowThresholdMs, double errorRateDownThreshold)
     {
         var services = new List<ServiceHealthDto>();
         foreach (var s in aggregate.ServiceStats)
         {
             var errorRate = s.TotalSpans > 0 ? s.ErrorSpans / (double)s.TotalSpans * 100.0 : 0.0;
             var p99Ms = s.P99Us.HasValue ? s.P99Us.Value / 1000.0 : 0.0;
-            var status = errorRate >= ErrorRateDownThreshold
+            var status = errorRate >= errorRateDownThreshold
                 ? "error"
                 : p99Ms >= slowThresholdMs
                     ? "slow"
@@ -132,14 +132,14 @@ public sealed class DashboardService : IDashboardService
     }
 
     private async Task<IReadOnlyList<AlertDto>> BuildAlertsAsync(
-        DateTime fromUtc, int slowThresholdMs, string? service, CancellationToken ct)
+        DateTime fromUtc, int slowThresholdMs, TracingAlertsOptions alerts, string? service, CancellationToken ct)
     {
         var errorTraces = await _store.QueryRecentTracesAsync(new TraceQuery
         {
             FromUtc = fromUtc,
             Status = "error",
             Service = service,
-            Limit = 6,
+            Limit = Math.Max(1, alerts.MaxAlerts),
             Sort = "start_desc",
         }, ct);
 
@@ -149,46 +149,68 @@ public sealed class DashboardService : IDashboardService
             Status = "slow",
             Service = service,
             SlowThresholdMs = slowThresholdMs,
-            Limit = 6,
+            Limit = Math.Max(1, alerts.MaxAlerts),
             Sort = "start_desc",
         }, ct);
 
-        var alerts = new List<AlertDto>(errorTraces.Count + slowTraces.Count);
+        var ackState = (await _store.GetAlertStatesAsync(ct)).ToDictionary(a => a.AlertKey, a => a.Acknowledged);
+
+        var alerts2 = new List<AlertDto>(errorTraces.Count + slowTraces.Count);
 
         foreach (var t in errorTraces)
         {
             var name = string.IsNullOrEmpty(t.RootName) ? "trace" : t.RootName;
-            alerts.Add(new AlertDto
+            var key = $"err-{t.TraceId}";
+            alerts2.Add(new AlertDto
             {
-                Id = $"err-{t.TraceId}",
+                Id = key,
                 Level = "error",
                 Title = $"Error in {name}",
                 Message = $"{t.RootService} finished in error ({t.SpanCount} spans, {FormatDuration(t.DurationUs / 1000.0)})",
                 Service = string.IsNullOrEmpty(t.RootService) ? "unknown" : t.RootService,
                 Time = new DateTimeOffset(t.StartTimeUtc, TimeSpan.Zero),
-                Acknowledged = false,
+                Acknowledged = ackState.TryGetValue(key, out var ack) && ack,
             });
         }
 
         foreach (var t in slowTraces)
         {
             var name = string.IsNullOrEmpty(t.RootName) ? "trace" : t.RootName;
-            alerts.Add(new AlertDto
+            var key = $"slow-{t.TraceId}";
+            alerts2.Add(new AlertDto
             {
-                Id = $"slow-{t.TraceId}",
+                Id = key,
                 Level = "warning",
                 Title = $"Slow trace: {name}",
                 Message = $"{t.RootService} took {FormatDuration(t.DurationUs / 1000.0)} (threshold {slowThresholdMs}ms)",
                 Service = string.IsNullOrEmpty(t.RootService) ? "unknown" : t.RootService,
                 Time = new DateTimeOffset(t.StartTimeUtc, TimeSpan.Zero),
-                Acknowledged = false,
+                Acknowledged = ackState.TryGetValue(key, out var ack) && ack,
             });
         }
 
-        return alerts
+        return alerts2
             .OrderByDescending(a => a.Time)
-            .Take(MaxAlerts)
+            .Take(Math.Max(1, alerts.MaxAlerts))
             .ToList();
+    }
+
+    public async Task<IReadOnlyList<AlertDto>> GetAlertsAsync(string? service, CancellationToken ct = default)
+    {
+        var opts = await _resolver.ResolveAsync(ct);
+        if (!opts.Alerts.Enabled)
+            return Array.Empty<AlertDto>();
+
+        var windowSeconds = Math.Max(60, opts.Query.DashboardWindowSeconds);
+        var fromUtc = DateTime.UtcNow.AddSeconds(-windowSeconds);
+        return await BuildAlertsAsync(fromUtc, Math.Max(1, opts.Query.SlowThresholdMs), opts.Alerts, service, ct);
+    }
+
+    public async Task AcknowledgeAlertAsync(string alertKey, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(alertKey))
+            return;
+        await _store.AcknowledgeAlertAsync(alertKey.Trim(), ct);
     }
 
     private static double RoundMs(double? durationUs)
