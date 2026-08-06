@@ -13,6 +13,9 @@ public interface ITelemetryStore
     Task<DashboardAggregate> QueryDashboardAggregateAsync(DateTime fromUtc, int bucketSeconds, CancellationToken ct);
     Task<IReadOnlyList<ThroughputBucketRow>> QueryThroughputAsync(DateTime fromUtc, int bucketSeconds, CancellationToken ct);
     Task<long> DeleteSpansOlderThanAsync(DateTime olderThanUtc, CancellationToken ct);
+    Task InsertLogsAsync(IReadOnlyList<LogRecord> logs, CancellationToken ct);
+    Task<IReadOnlyList<LogRow>> QueryLogsAsync(LogQuery query, CancellationToken ct);
+    Task<long> DeleteLogsOlderThanAsync(DateTime olderThanUtc, CancellationToken ct);
 }
 
 public sealed class TelemetryStore : ITelemetryStore
@@ -217,6 +220,138 @@ LEFT JOIN Roots r ON r.TraceId = a.TraceId AND r.rn = 1";
             new { OlderThanUtc = olderThanUtc }, cancellationToken: ct));
     }
 
+    public async Task InsertLogsAsync(IReadOnlyList<LogRecord> logs, CancellationToken ct)
+    {
+        if (logs.Count == 0)
+            return;
+
+        var table = new DataTable();
+        table.Columns.Add("TimestampUtc", typeof(DateTime));
+        table.Columns.Add("ServiceName", typeof(string));
+        table.Columns.Add("ServiceVersion", typeof(string));
+        table.Columns.Add("ServiceEnvironment", typeof(string));
+        table.Columns.Add("SeverityText", typeof(string));
+        table.Columns.Add("SeverityNumber", typeof(int));
+        table.Columns.Add("Body", typeof(string));
+        table.Columns.Add("TraceId", typeof(string));
+        table.Columns.Add("SpanId", typeof(string));
+        table.Columns.Add("AttributesJson", typeof(string));
+        table.Columns.Add("ResourceJson", typeof(string));
+
+        foreach (var log in logs)
+        {
+            var row = table.NewRow();
+            row["TimestampUtc"] = log.TimestampUtc;
+            row["ServiceName"] = log.ServiceName;
+            row["ServiceVersion"] = (object?)log.ServiceVersion ?? DBNull.Value;
+            row["ServiceEnvironment"] = (object?)log.ServiceEnvironment ?? DBNull.Value;
+            row["SeverityText"] = log.SeverityText;
+            row["SeverityNumber"] = log.SeverityNumber;
+            row["Body"] = (object?)log.Body ?? DBNull.Value;
+            row["TraceId"] = (object?)log.TraceId ?? DBNull.Value;
+            row["SpanId"] = (object?)log.SpanId ?? DBNull.Value;
+            row["AttributesJson"] = (object?)log.AttributesJson ?? DBNull.Value;
+            row["ResourceJson"] = (object?)log.ResourceJson ?? DBNull.Value;
+            table.Rows.Add(row);
+        }
+
+        await using var connection = OpenConnection();
+        await connection.OpenAsync(ct);
+        using var bulk = new SqlBulkCopy(connection)
+        {
+            DestinationTableName = "dbo.Logs",
+            BatchSize = 1000,
+        };
+        foreach (DataColumn column in table.Columns)
+            bulk.ColumnMappings.Add(column.ColumnName, column.ColumnName);
+        await bulk.WriteToServerAsync(table, ct);
+    }
+
+    public async Task<IReadOnlyList<LogRow>> QueryLogsAsync(LogQuery query, CancellationToken ct)
+    {
+        const string baseSql = @"
+SELECT TimestampUtc, ServiceName, ServiceVersion, ServiceEnvironment,
+       SeverityText, SeverityNumber, Body, TraceId, SpanId, AttributesJson,
+       COUNT(*) OVER () AS Total
+FROM dbo.Logs";
+
+        var where = new List<string> { "TimestampUtc >= @FromUtc" };
+        var parameters = new DynamicParameters();
+
+        parameters.Add("FromUtc", query.FromUtc ?? DateTime.UtcNow.AddHours(-1), DbType.DateTime2);
+        parameters.Add("ToUtc", query.ToUtc, DbType.DateTime2);
+        parameters.Add("Service", query.Service);
+        parameters.Add("TraceId", query.TraceId);
+
+        if (query.ToUtc.HasValue)
+            where.Add("TimestampUtc <= @ToUtc");
+        if (!string.IsNullOrWhiteSpace(query.Service))
+            where.Add("ServiceName = @Service");
+        if (!string.IsNullOrWhiteSpace(query.TraceId))
+            where.Add("TraceId = @TraceId");
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            where.Add("(Body LIKE @SearchPattern ESCAPE N'~' OR AttributesJson LIKE @SearchPattern ESCAPE N'~')");
+            parameters.Add("SearchPattern", $"%{EscapeLike(query.Search)}%");
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Severity))
+        {
+            var minNumber = query.Severity.ToLowerInvariant() switch
+            {
+                "error" or "fatal" or "critical" => 17,
+                "warn" or "warning" => 13,
+                _ => (int?)null,
+            };
+            if (minNumber.HasValue)
+            {
+                where.Add("SeverityNumber >= @MinSeverityNumber");
+                parameters.Add("MinSeverityNumber", minNumber.Value);
+            }
+        }
+
+        var orderBy = query.Sort?.ToLowerInvariant() switch
+        {
+            "start_asc" => "TimestampUtc ASC",
+            "start_desc" => "TimestampUtc DESC",
+            _ => "TimestampUtc DESC",
+        };
+
+        parameters.Add("Offset", Math.Max(0, query.Offset));
+        parameters.Add("Limit", Math.Clamp(query.Limit, 1, 1000));
+
+        var sql = baseSql
+            + "\nWHERE " + string.Join("\n  AND ", where)
+            + $"\nORDER BY {orderBy}\nOFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;";
+
+        await using var connection = OpenConnection();
+        var rows = await connection.QueryAsync<LogRowSql>(new CommandDefinition(sql, parameters, cancellationToken: ct));
+
+        return rows.Select(r => new LogRow
+        {
+            TimestampUtc = r.TimestampUtc,
+            ServiceName = r.ServiceName,
+            ServiceVersion = r.ServiceVersion,
+            ServiceEnvironment = r.ServiceEnvironment,
+            SeverityText = r.SeverityText,
+            SeverityNumber = r.SeverityNumber,
+            Body = r.Body,
+            TraceId = r.TraceId,
+            SpanId = r.SpanId,
+            AttributesJson = r.AttributesJson,
+            Total = r.Total,
+        }).ToList();
+    }
+
+    public async Task<long> DeleteLogsOlderThanAsync(DateTime olderThanUtc, CancellationToken ct)
+    {
+        const string sql = "DELETE FROM dbo.Logs WHERE TimestampUtc < @OlderThanUtc;";
+        await using var connection = OpenConnection();
+        return await connection.ExecuteAsync(new CommandDefinition(sql,
+            new { OlderThanUtc = olderThanUtc }, cancellationToken: ct));
+    }
+
     private static string EscapeLike(string value) => value
         .Replace("~", "~~")
         .Replace("%", "~%")
@@ -414,5 +549,20 @@ ORDER BY BucketIndex;";
         public required long ErrorSpans { get; init; }
         public required DateTime LastSeenUtc { get; init; }
         public double? P99Us { get; init; }
+    }
+
+    private sealed class LogRowSql
+    {
+        public required DateTime TimestampUtc { get; init; }
+        public required string ServiceName { get; init; }
+        public string? ServiceVersion { get; init; }
+        public string? ServiceEnvironment { get; init; }
+        public required string SeverityText { get; init; }
+        public int SeverityNumber { get; init; }
+        public string? Body { get; init; }
+        public string? TraceId { get; init; }
+        public string? SpanId { get; init; }
+        public string? AttributesJson { get; init; }
+        public required int Total { get; init; }
     }
 }

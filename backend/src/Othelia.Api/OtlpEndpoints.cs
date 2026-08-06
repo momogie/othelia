@@ -90,14 +90,26 @@ public static class OtlpEndpoints
         }
     }
 
-    private static async Task<IResult> HandleLogsAsync(HttpContext context, ILoggerFactory loggerFactory)
+    private static async Task<IResult> HandleLogsAsync(
+        HttpContext context,
+        ITelemetryStore store,
+        ITracingOptionsResolver resolver,
+        ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger("Otlp.Logs");
         try
         {
             var request = await ReadRequestAsync<ExportLogsServiceRequest>(context.Request, context.RequestAborted);
-            var count = request.ResourceLogs.Sum(rl => rl.ScopeLogs.Sum(sl => sl.LogRecords.Count));
-            logger.LogDebug("Received {Count} log records (not persisted in Phase 1).", count);
+            var logs = OtlpLogConverter.ConvertRequest(request);
+
+            var options = await resolver.ResolveAsync(context.RequestAborted);
+            if (!options.Ingestion.Enabled)
+            {
+                logger.LogDebug("Log ingestion disabled; accepted and dropped {Count} logs.", logs.Count);
+                return Results.Bytes(Array.Empty<byte>(), "application/x-protobuf");
+            }
+
+            await store.InsertLogsAsync(logs, context.RequestAborted);
             return Results.Bytes(Array.Empty<byte>(), "application/x-protobuf");
         }
         catch (UnsupportedContentTypeException ex)

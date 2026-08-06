@@ -83,6 +83,33 @@ public sealed class TracingService : ITracingService
         }).ToList();
     }
 
+    public async Task<LogQueryResult> GetLogsAsync(LogQuery query, CancellationToken ct = default)
+    {
+        var effectiveQuery = query with
+        {
+            FromUtc = query.FromUtc ?? DateTime.UtcNow.AddSeconds(-_options.Query.DefaultLookbackSeconds),
+            Limit = Math.Clamp(query.Limit > 0 ? query.Limit : _options.Query.MaxTracesPerRequest,
+                1, _options.Query.MaxTracesPerRequest),
+        };
+
+        var rows = await _store.QueryLogsAsync(effectiveQuery, ct);
+
+        var items = rows.Select(r => new LogDto
+        {
+            Timestamp = new DateTimeOffset(r.TimestampUtc, TimeSpan.Zero),
+            ServiceName = r.ServiceName,
+            ServiceVersion = r.ServiceVersion,
+            ServiceEnvironment = r.ServiceEnvironment,
+            Severity = r.SeverityText,
+            Body = r.Body,
+            TraceId = r.TraceId,
+            SpanId = r.SpanId,
+            Attributes = DeserializeAttributes(r.AttributesJson),
+        }).ToList();
+
+        return new LogQueryResult { Items = items, Total = rows.FirstOrDefault()?.Total ?? 0 };
+    }
+
     private static IReadOnlyDictionary<string, string>? DeserializeAttributes(string? json)
     {
         if (string.IsNullOrEmpty(json))

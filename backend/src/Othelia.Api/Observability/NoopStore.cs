@@ -34,4 +34,11 @@ public sealed class NoopTelemetryStore : ITelemetryStore
         => Task.FromResult<IReadOnlyList<ThroughputBucketRow>>(Array.Empty<ThroughputBucketRow>());
 
     public Task<long> DeleteSpansOlderThanAsync(DateTime olderThanUtc, CancellationToken ct) => Task.FromResult(0L);
+
+    public Task InsertLogsAsync(IReadOnlyList<LogRecord> logs, CancellationToken ct) => Task.CompletedTask;
+
+    public Task<IReadOnlyList<LogRow>> QueryLogsAsync(LogQuery query, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<LogRow>>(Array.Empty<LogRow>());
+
+    public Task<long> DeleteLogsOlderThanAsync(DateTime olderThanUtc, CancellationToken ct) => Task.FromResult(0L);
 }

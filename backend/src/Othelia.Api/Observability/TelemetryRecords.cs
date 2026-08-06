@@ -78,3 +78,46 @@ public sealed record ServiceStatsRow
     public required DateTime LastSeenUtc { get; init; }
     public double? P99Us { get; init; }
 }
+
+public sealed record LogRecord
+{
+    public required DateTime TimestampUtc { get; init; }
+    public required string ServiceName { get; init; }
+    public string? ServiceVersion { get; init; }
+    public string? ServiceEnvironment { get; init; }
+    public required string SeverityText { get; init; }
+    public int SeverityNumber { get; init; }
+    public string? Body { get; init; }
+    public string? TraceId { get; init; }
+    public string? SpanId { get; init; }
+    public string? AttributesJson { get; init; }
+    public string? ResourceJson { get; init; }
+}
+
+public sealed record LogRow
+{
+    public required DateTime TimestampUtc { get; init; }
+    public required string ServiceName { get; init; }
+    public string? ServiceVersion { get; init; }
+    public string? ServiceEnvironment { get; init; }
+    public required string SeverityText { get; init; }
+    public int SeverityNumber { get; init; }
+    public string? Body { get; init; }
+    public string? TraceId { get; init; }
+    public string? SpanId { get; init; }
+    public string? AttributesJson { get; init; }
+    public required int Total { get; init; }
+}
+
+public sealed record LogQuery
+{
+    public string? Service { get; init; }
+    public string? Severity { get; init; }
+    public string? Search { get; init; }
+    public string? TraceId { get; init; }
+    public DateTime? FromUtc { get; init; }
+    public DateTime? ToUtc { get; init; }
+    public int Limit { get; init; } = 100;
+    public int Offset { get; init; }
+    public string? Sort { get; init; }
+}

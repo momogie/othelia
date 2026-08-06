@@ -56,6 +56,28 @@ BEGIN
     CREATE INDEX IX_Spans_TraceId ON dbo.Spans (TraceId) INCLUDE (StartTimeUtc);
     CREATE INDEX IX_Spans_StartTimeUtc ON dbo.Spans (StartTimeUtc) INCLUDE (TraceId, StatusCode);
     CREATE INDEX IX_Spans_ServiceName_StartTimeUtc ON dbo.Spans (ServiceName, StartTimeUtc);
+END;
+
+IF OBJECT_ID(N'dbo.Logs', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Logs
+    (
+        Id                BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Logs PRIMARY KEY,
+        TimestampUtc      DATETIME2(3)   NOT NULL,
+        ServiceName       NVARCHAR(255)  NOT NULL,
+        ServiceVersion    NVARCHAR(64)   NULL,
+        ServiceEnvironment NVARCHAR(64)  NULL,
+        SeverityText      NVARCHAR(32)   NOT NULL,
+        SeverityNumber    INT            NOT NULL,
+        Body              NVARCHAR(MAX)  NULL,
+        TraceId           CHAR(32)       NULL,
+        SpanId            CHAR(16)       NULL,
+        AttributesJson    NVARCHAR(MAX)  NULL,
+        ResourceJson      NVARCHAR(MAX)  NULL
+    );
+
+    CREATE INDEX IX_Logs_TimestampUtc ON dbo.Logs (TimestampUtc) INCLUDE (ServiceName, SeverityText);
+    CREATE INDEX IX_Logs_ServiceName_TimestampUtc ON dbo.Logs (ServiceName, TimestampUtc);
 END;";
 
         await using var connection = new SqlConnection(_connectionString);

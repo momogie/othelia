@@ -81,6 +81,18 @@ export interface ApiAlert {
   acknowledged: boolean
 }
 
+export interface ApiLog {
+  timestamp: string
+  serviceName: string
+  serviceVersion?: string | null
+  serviceEnvironment?: string | null
+  severity: string
+  body?: string | null
+  traceId?: string | null
+  spanId?: string | null
+  attributes?: Record<string, string> | null
+}
+
 export interface ApiThroughputSeries {
   range: string
   windowSeconds: number

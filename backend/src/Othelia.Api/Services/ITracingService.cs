@@ -12,4 +12,6 @@ public interface ITracingService
         CancellationToken ct = default);
 
     Task<IReadOnlyList<SpanDto>> GetSpansAsync(string traceId, CancellationToken ct = default);
+
+    Task<LogQueryResult> GetLogsAsync(LogQuery query, CancellationToken ct = default);
 }
