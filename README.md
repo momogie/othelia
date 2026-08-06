@@ -2,6 +2,11 @@
 
 OpenTelemetry dashboard untuk distributed tracing — menerima telemetry via OTLP, menyimpannya ke SQL Server, dan menampilkan traces/spans secara visual.
 
+## Dokumentasi
+
+- [Arsitektur](docs/architecture/README.md) — komponen, alur data, skema DB, referensi konfigurasi.
+- [Setup & Deployment](docs/setup/deployment.md) — panduan deploy di Linux (backend, frontend, nginx, SQL Server).
+
 ## Struktur Project
 
 ```
