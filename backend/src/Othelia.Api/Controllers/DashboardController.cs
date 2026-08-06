@@ -12,10 +12,13 @@ public sealed class DashboardController : ControllerBase
     public DashboardController(IDashboardService dashboard) => _dashboard = dashboard;
 
     [HttpGet]
-    public async Task<IActionResult> Get(CancellationToken ct)
-        => Ok(await _dashboard.GetAsync(ct));
+    public async Task<IActionResult> Get([FromQuery] string? service, CancellationToken ct)
+        => Ok(await _dashboard.GetAsync(service, ct));
 
     [HttpGet("throughput")]
-    public async Task<IActionResult> GetThroughput([FromQuery] string? range, CancellationToken ct)
-        => Ok(await _dashboard.GetThroughputAsync(range, ct));
+    public async Task<IActionResult> GetThroughput(
+        [FromQuery] string? range,
+        [FromQuery] string? service,
+        CancellationToken ct)
+        => Ok(await _dashboard.GetThroughputAsync(range, service, ct));
 }

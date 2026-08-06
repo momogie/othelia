@@ -87,6 +87,12 @@ export function useLogs() {
     }
   }
 
+  const { selectedService } = useServiceScope()
+  watch(selectedService, (svc) => {
+    filter.value.service = svc
+    refresh()
+  })
+
   return {
     logs,
     total,

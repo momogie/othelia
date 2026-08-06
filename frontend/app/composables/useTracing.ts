@@ -156,6 +156,12 @@ export function useTracing() {
     }
   }
 
+  const { selectedService } = useServiceScope()
+  watch(selectedService, (svc) => {
+    filter.value.service = svc
+    refresh()
+  })
+
   return {
     traces,
     allLogs,

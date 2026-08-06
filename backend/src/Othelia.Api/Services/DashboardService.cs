@@ -6,8 +6,8 @@ namespace Othelia.Api.Services;
 
 public interface IDashboardService
 {
-    Task<DashboardDto> GetAsync(CancellationToken ct = default);
-    Task<ThroughputSeriesDto> GetThroughputAsync(string? range, CancellationToken ct = default);
+    Task<DashboardDto> GetAsync(string? service, CancellationToken ct = default);
+    Task<ThroughputSeriesDto> GetThroughputAsync(string? range, string? service, CancellationToken ct = default);
 }
 
 public sealed class DashboardService : IDashboardService
@@ -24,7 +24,7 @@ public sealed class DashboardService : IDashboardService
         _options = options.Value;
     }
 
-    public async Task<DashboardDto> GetAsync(CancellationToken ct = default)
+    public async Task<DashboardDto> GetAsync(string? service, CancellationToken ct = default)
     {
         var query = _options.Query;
         var windowSeconds = Math.Max(60, query.DashboardWindowSeconds);
@@ -34,9 +34,9 @@ public sealed class DashboardService : IDashboardService
         var nowUtc = DateTime.UtcNow;
         var fromUtc = nowUtc.AddSeconds(-windowSeconds);
 
-        var aggregate = await _store.QueryDashboardAggregateAsync(fromUtc, bucketSeconds, ct);
+        var aggregate = await _store.QueryDashboardAggregateAsync(fromUtc, bucketSeconds, service, ct);
 
-        var alerts = await BuildAlertsAsync(fromUtc, query.SlowThresholdMs, ct);
+        var alerts = await BuildAlertsAsync(fromUtc, query.SlowThresholdMs, service, ct);
 
         var metrics = BuildMetrics(aggregate, windowSeconds);
         var throughput = BuildThroughput(aggregate, fromUtc, bucketSeconds, buckets);
@@ -131,12 +131,14 @@ public sealed class DashboardService : IDashboardService
             .ToList();
     }
 
-    private async Task<IReadOnlyList<AlertDto>> BuildAlertsAsync(DateTime fromUtc, int slowThresholdMs, CancellationToken ct)
+    private async Task<IReadOnlyList<AlertDto>> BuildAlertsAsync(
+        DateTime fromUtc, int slowThresholdMs, string? service, CancellationToken ct)
     {
         var errorTraces = await _store.QueryRecentTracesAsync(new TraceQuery
         {
             FromUtc = fromUtc,
             Status = "error",
+            Service = service,
             Limit = 6,
             Sort = "start_desc",
         }, ct);
@@ -145,6 +147,7 @@ public sealed class DashboardService : IDashboardService
         {
             FromUtc = fromUtc,
             Status = "slow",
+            Service = service,
             SlowThresholdMs = slowThresholdMs,
             Limit = 6,
             Sort = "start_desc",
@@ -191,11 +194,11 @@ public sealed class DashboardService : IDashboardService
     private static double RoundMs(double? durationUs)
         => durationUs.HasValue ? Math.Round(durationUs.Value / 1000.0, 2) : 0.0;
 
-    public async Task<ThroughputSeriesDto> GetThroughputAsync(string? range, CancellationToken ct = default)
+    public async Task<ThroughputSeriesDto> GetThroughputAsync(string? range, string? service, CancellationToken ct = default)
     {
         var (windowSeconds, bucketSeconds) = ResolveRange(range);
         var fromUtc = DateTime.UtcNow.AddSeconds(-windowSeconds);
-        var buckets = await _store.QueryThroughputAsync(fromUtc, bucketSeconds, ct);
+        var buckets = await _store.QueryThroughputAsync(fromUtc, bucketSeconds, service, ct);
 
         var count = (int)Math.Ceiling(windowSeconds / (double)bucketSeconds);
         var points = new List<ThroughputPointDto>(count);

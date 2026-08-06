@@ -4,7 +4,6 @@ import type { TraceVM } from '~/utils/mockData'
 const {
   traces,
   total,
-  services,
   filter,
   findTrace,
   refresh,
@@ -12,7 +11,6 @@ const {
   loadingMore,
   hasMore,
   loadMore,
-  loadServices,
 } = useTracing()
 
 const searchQuery = ref('')
@@ -82,8 +80,10 @@ function selectTrace(trace: TraceVM) {
   findTrace(trace.id)
 }
 
+const { selectedService } = useServiceScope()
+
 onMounted(() => {
-  loadServices()
+  filter.value.service = selectedService.value
   filter.value.from = new Date(Date.now() - (rangeSeconds['15m'] ?? 900) * 1000).toISOString()
   refresh()
 })
@@ -118,13 +118,6 @@ onMounted(() => {
         <option value="ok">OK</option>
         <option value="error">Error</option>
         <option value="slow">Slow</option>
-      </select>
-    </div>
-    <div class="filter-chip" :class="{ active: filter.service !== 'all' }" style="cursor:default">
-      <span>Service</span>
-      <select v-model="filter.service" @change="refresh">
-        <option value="all">All</option>
-        <option v-for="s in services" :key="s.name" :value="s.name">{{ s.name }}</option>
       </select>
     </div>
     <div class="tb-sep"></div>

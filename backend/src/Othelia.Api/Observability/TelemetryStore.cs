@@ -10,8 +10,8 @@ public interface ITelemetryStore
     Task<IReadOnlyList<TraceRow>> QueryRecentTracesAsync(TraceQuery query, CancellationToken ct);
     Task<IReadOnlyList<SpanRecord>> QuerySpansAsync(string traceId, CancellationToken ct);
     Task<IReadOnlyList<ServiceRow>> QueryServicesAsync(DateTime fromUtc, CancellationToken ct);
-    Task<DashboardAggregate> QueryDashboardAggregateAsync(DateTime fromUtc, int bucketSeconds, CancellationToken ct);
-    Task<IReadOnlyList<ThroughputBucketRow>> QueryThroughputAsync(DateTime fromUtc, int bucketSeconds, CancellationToken ct);
+    Task<DashboardAggregate> QueryDashboardAggregateAsync(DateTime fromUtc, int bucketSeconds, string? service, CancellationToken ct);
+    Task<IReadOnlyList<ThroughputBucketRow>> QueryThroughputAsync(DateTime fromUtc, int bucketSeconds, string? service, CancellationToken ct);
     Task<long> DeleteSpansOlderThanAsync(DateTime olderThanUtc, CancellationToken ct);
     Task InsertLogsAsync(IReadOnlyList<LogRecord> logs, CancellationToken ct);
     Task<IReadOnlyList<LogRow>> QueryLogsAsync(LogQuery query, CancellationToken ct);
@@ -379,15 +379,34 @@ ORDER BY StartTimeUtc;";
     public async Task<IReadOnlyList<ServiceRow>> QueryServicesAsync(DateTime fromUtc, CancellationToken ct)
     {
         const string sql = @"
-SELECT ServiceName,
-       MAX(ServiceVersion) AS ServiceVersion,
-       MAX(ServiceEnvironment) AS ServiceEnvironment,
-       COUNT(DISTINCT TraceId) AS TotalTraces,
-       SUM(CASE WHEN StatusCode = N'Error' THEN 1 ELSE 0 END) AS ErrorCount,
-       MAX(StartTimeUtc) AS LastSeenUtc
-FROM dbo.Spans
-WHERE StartTimeUtc >= @FromUtc
-GROUP BY ServiceName
+;WITH Spans AS (
+    SELECT ServiceName,
+           MAX(ServiceVersion) AS ServiceVersion,
+           MAX(ServiceEnvironment) AS ServiceEnvironment,
+           COUNT(DISTINCT TraceId) AS TotalTraces,
+           SUM(CASE WHEN StatusCode = N'Error' THEN 1 ELSE 0 END) AS ErrorCount,
+           MAX(StartTimeUtc) AS LastSeenUtc
+    FROM dbo.Spans
+    WHERE StartTimeUtc >= @FromUtc
+    GROUP BY ServiceName
+),
+LogOnly AS (
+    SELECT l.ServiceName,
+           MAX(l.ServiceVersion) AS ServiceVersion,
+           MAX(l.ServiceEnvironment) AS ServiceEnvironment,
+           0 AS TotalTraces,
+           0 AS ErrorCount,
+           MAX(l.TimestampUtc) AS LastSeenUtc
+    FROM dbo.Logs l
+    WHERE l.TimestampUtc >= @FromUtc
+      AND NOT EXISTS (SELECT 1 FROM Spans s WHERE s.ServiceName = l.ServiceName)
+    GROUP BY l.ServiceName
+)
+SELECT ServiceName, ServiceVersion, ServiceEnvironment, TotalTraces, ErrorCount, LastSeenUtc
+FROM Spans
+UNION ALL
+SELECT ServiceName, ServiceVersion, ServiceEnvironment, TotalTraces, ErrorCount, LastSeenUtc
+FROM LogOnly
 ORDER BY LastSeenUtc DESC;";
 
         await using var connection = OpenConnection();
@@ -397,7 +416,7 @@ ORDER BY LastSeenUtc DESC;";
     }
 
     public async Task<DashboardAggregate> QueryDashboardAggregateAsync(
-        DateTime fromUtc, int bucketSeconds, CancellationToken ct)
+        DateTime fromUtc, int bucketSeconds, string? service, CancellationToken ct)
     {
         const string totalsSql = @"
 ;WITH Agg AS (
@@ -405,6 +424,7 @@ ORDER BY LastSeenUtc DESC;";
            MAX(CASE WHEN StatusCode = N'Error' THEN 1 ELSE 0 END) AS HasError
     FROM dbo.Spans
     WHERE StartTimeUtc >= @FromUtc
+      AND (@Service IS NULL OR EXISTS (SELECT 1 FROM dbo.Spans s2 WHERE s2.TraceId = dbo.Spans.TraceId AND s2.ServiceName = @Service))
     GROUP BY TraceId
 ),
 Totals AS (
@@ -414,13 +434,17 @@ Totals AS (
 )
 SELECT t.TotalTraces, t.ErrorTraces, s.TotalSpans
 FROM Totals t
-CROSS JOIN (SELECT COUNT(*) AS TotalSpans FROM dbo.Spans WHERE StartTimeUtc >= @FromUtc) s;";
+CROSS JOIN (SELECT COUNT(*) AS TotalSpans
+            FROM dbo.Spans
+            WHERE StartTimeUtc >= @FromUtc
+              AND (@Service IS NULL OR EXISTS (SELECT 1 FROM dbo.Spans s2 WHERE s2.TraceId = dbo.Spans.TraceId AND s2.ServiceName = @Service))) s;";
 
         const string percentileSql = @"
 ;WITH Agg AS (
     SELECT DATEDIFF(MICROSECOND, MIN(StartTimeUtc), MAX(EndTimeUtc)) AS DurationUs
     FROM dbo.Spans
     WHERE StartTimeUtc >= @FromUtc
+      AND (@Service IS NULL OR EXISTS (SELECT 1 FROM dbo.Spans s2 WHERE s2.TraceId = dbo.Spans.TraceId AND s2.ServiceName = @Service))
     GROUP BY TraceId
 )
 SELECT DISTINCT
@@ -439,6 +463,7 @@ FROM Agg;";
            MAX(StartTimeUtc) AS LastSeenUtc
     FROM dbo.Spans
     WHERE StartTimeUtc >= @FromUtc
+      AND (@Service IS NULL OR ServiceName = @Service)
     GROUP BY ServiceName
 ),
 Pct AS (
@@ -446,6 +471,7 @@ Pct AS (
            PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY DurationUs) OVER (PARTITION BY ServiceName) AS P99Us
     FROM dbo.Spans
     WHERE StartTimeUtc >= @FromUtc
+      AND (@Service IS NULL OR ServiceName = @Service)
 )
 SELECT s.ServiceName, s.ServiceVersion, s.ServiceEnvironment,
        s.TotalTraces, s.TotalSpans, s.ErrorSpans, s.LastSeenUtc, p.P99Us
@@ -456,15 +482,15 @@ ORDER BY s.LastSeenUtc DESC;";
         await using var connection = OpenConnection();
 
         var totals = await connection.QueryFirstOrDefaultAsync<TotalsRow>(new CommandDefinition(totalsSql,
-            new { FromUtc = fromUtc }, cancellationToken: ct));
+            new { FromUtc = fromUtc, Service = service }, cancellationToken: ct));
 
         var percentile = await connection.QueryFirstOrDefaultAsync<PercentileRow>(new CommandDefinition(percentileSql,
-            new { FromUtc = fromUtc }, cancellationToken: ct));
+            new { FromUtc = fromUtc, Service = service }, cancellationToken: ct));
 
-        var throughput = await QueryThroughputAsync(fromUtc, bucketSeconds, ct);
+        var throughput = await QueryThroughputAsync(fromUtc, bucketSeconds, service, ct);
 
         var services = await connection.QueryAsync<ServiceStatsSqlRow>(new CommandDefinition(servicesSql,
-            new { FromUtc = fromUtc }, cancellationToken: ct));
+            new { FromUtc = fromUtc, Service = service }, cancellationToken: ct));
 
         return new DashboardAggregate
         {
@@ -489,14 +515,15 @@ ORDER BY s.LastSeenUtc DESC;";
     }
 
     public async Task<IReadOnlyList<ThroughputBucketRow>> QueryThroughputAsync(
-        DateTime fromUtc, int bucketSeconds, CancellationToken ct)
+        DateTime fromUtc, int bucketSeconds, string? service, CancellationToken ct)
     {
         const string sql = @"
 ;WITH Spans AS (
-    SELECT TraceId,
-           DATEDIFF(SECOND, @FromUtc, StartTimeUtc) / @BucketSeconds AS BucketIndex
-    FROM dbo.Spans
-    WHERE StartTimeUtc >= @FromUtc
+    SELECT s.TraceId,
+           DATEDIFF(SECOND, @FromUtc, s.StartTimeUtc) / @BucketSeconds AS BucketIndex
+    FROM dbo.Spans s
+    WHERE s.StartTimeUtc >= @FromUtc
+      AND (@Service IS NULL OR EXISTS (SELECT 1 FROM dbo.Spans s2 WHERE s2.TraceId = s.TraceId AND s2.ServiceName = @Service))
 )
 SELECT BucketIndex, COUNT(DISTINCT TraceId) AS [Count]
 FROM Spans
@@ -505,7 +532,7 @@ ORDER BY BucketIndex;";
 
         await using var connection = OpenConnection();
         var rows = await connection.QueryAsync<ThroughputBucketRow>(new CommandDefinition(sql,
-            new { FromUtc = fromUtc, BucketSeconds = Math.Max(1, bucketSeconds) }, cancellationToken: ct));
+            new { FromUtc = fromUtc, BucketSeconds = Math.Max(1, bucketSeconds), Service = service }, cancellationToken: ct));
         return rows.ToList();
     }
 

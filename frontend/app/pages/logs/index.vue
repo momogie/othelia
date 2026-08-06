@@ -5,11 +5,9 @@ const {
   loading,
   loadingMore,
   hasMore,
-  services,
   filter,
   refresh,
   loadMore,
-  loadServices,
 } = useLogs()
 
 const activeTimeRange = ref('15m')
@@ -55,8 +53,10 @@ function attrEntries(attrs: Record<string, string> | null | undefined): [string,
   return Object.entries(attrs ?? {})
 }
 
+const { selectedService } = useServiceScope()
+
 onMounted(() => {
-  loadServices()
+  filter.value.service = selectedService.value
   filter.value.from = new Date(Date.now() - (rangeSeconds['15m'] ?? 900) * 1000).toISOString()
   refresh()
 })
@@ -90,13 +90,6 @@ onMounted(() => {
         <option value="all">All</option>
         <option value="error">ERROR</option>
         <option value="warn">WARN</option>
-      </select>
-    </div>
-    <div class="filter-chip" :class="{ active: filter.service !== 'all' }" style="cursor:default">
-      <span>Service</span>
-      <select v-model="filter.service" @change="refresh">
-        <option value="all">All</option>
-        <option v-for="s in services" :key="s.name" :value="s.name">{{ s.name }}</option>
       </select>
     </div>
     <div class="tb-spacer"></div>

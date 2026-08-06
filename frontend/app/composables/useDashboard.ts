@@ -170,7 +170,10 @@ export function useDashboard() {
   async function refresh() {
     loading.value = true
     try {
-      const data = await $fetch<ApiDashboard>('/api/dashboard')
+      const { selectedService } = useServiceScope()
+      const data = await $fetch<ApiDashboard>('/api/dashboard', {
+        query: { service: selectedService.value === 'all' ? undefined : selectedService.value },
+      })
       apply(data)
     } catch (e) {
       console.error('Failed to load dashboard', e)
@@ -182,6 +185,9 @@ export function useDashboard() {
       loading.value = false
     }
   }
+
+  const { selectedService } = useServiceScope()
+  watch(selectedService, () => refresh())
 
   return {
     metrics,

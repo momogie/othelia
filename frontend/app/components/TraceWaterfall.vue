@@ -4,9 +4,14 @@ import { halfDur } from '~/utils/traceFormat'
 
 defineProps<{ trace: TraceVM }>()
 const activeSpan = ref<SpanVM | null>(null)
+const { selectedService } = useServiceScope()
 
 function selectSpan(span: SpanVM) {
   activeSpan.value = activeSpan.value?.id === span.id ? null : span
+}
+
+function isDimmed(service: string): boolean {
+  return selectedService.value !== 'all' && service !== selectedService.value
 }
 </script>
 
@@ -28,7 +33,12 @@ function selectSpan(span: SpanVM) {
       v-for="span in trace.spanTree"
       :key="span.id"
       class="wf-row"
-      :class="{ active: activeSpan && activeSpan.id === span.id, 'error-row': span.status === 'error' }"
+      :class="{
+        active: activeSpan && activeSpan.id === span.id,
+        'error-row': span.status === 'error',
+        dimmed: isDimmed(span.service),
+        'hl-svc': selectedService !== 'all' && span.service === selectedService,
+      }"
       @click="selectSpan(span)"
     >
       <div class="wf-name-cell">

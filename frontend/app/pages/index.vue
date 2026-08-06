@@ -26,8 +26,10 @@ const rangeSeries = ref<{ time: string; timestamp: string; value: number }[]>([]
 
 async function refreshRangeSeries() {
   try {
+    const { selectedService } = useServiceScope()
     const d = await $fetch<{ windowSeconds: number; points: { time: string; timestamp: string; value: number }[] }>(
       `/api/dashboard/throughput?range=${activeRange.value}`,
+      { query: { service: selectedService.value === 'all' ? undefined : selectedService.value } },
     )
     rangeWindow.value = d.windowSeconds || 60
     rangeSeries.value = (d.points ?? []).map((p) => ({

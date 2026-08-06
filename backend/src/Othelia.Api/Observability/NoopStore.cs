@@ -19,7 +19,7 @@ public sealed class NoopTelemetryStore : ITelemetryStore
         => Task.FromResult<IReadOnlyList<ServiceRow>>(Array.Empty<ServiceRow>());
 
     public Task<DashboardAggregate> QueryDashboardAggregateAsync(
-        DateTime fromUtc, int bucketSeconds, CancellationToken ct)
+        DateTime fromUtc, int bucketSeconds, string? service, CancellationToken ct)
         => Task.FromResult(new DashboardAggregate
         {
             TotalTraces = 0,
@@ -30,7 +30,7 @@ public sealed class NoopTelemetryStore : ITelemetryStore
         });
 
     public Task<IReadOnlyList<ThroughputBucketRow>> QueryThroughputAsync(
-        DateTime fromUtc, int bucketSeconds, CancellationToken ct)
+        DateTime fromUtc, int bucketSeconds, string? service, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<ThroughputBucketRow>>(Array.Empty<ThroughputBucketRow>());
 
     public Task<long> DeleteSpansOlderThanAsync(DateTime olderThanUtc, CancellationToken ct) => Task.FromResult(0L);

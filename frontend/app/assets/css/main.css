@@ -376,6 +376,9 @@ html, body { height: 100%; font-family: 'Inter', sans-serif; background: var(--b
 .wf-row:hover { background: var(--hover-bg); }
 .wf-row.active { background: rgba(124,92,191,0.07); }
 .wf-row.error-row { background: rgba(231,76,60,0.04); }
+.wf-row.dimmed { opacity: 0.3; }
+.wf-row.hl-svc .wf-span-svc { color: var(--accent); font-weight: 600; }
+.wf-row.hl-svc { background: rgba(124,92,191,0.06); }
 
 .wf-name-cell {
   width: 280px; flex-shrink: 0; display: flex; align-items: center; gap: 6px;
