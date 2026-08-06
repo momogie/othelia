@@ -38,6 +38,10 @@ export default defineNuxtConfig({
         target: 'http://localhost:5007/api',
         changeOrigin: true,
       },
+      '/account': {
+        target: 'http://localhost:5007/account',
+        changeOrigin: true,
+      },
     },
   },
 })

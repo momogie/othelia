@@ -1,6 +1,12 @@
 <script setup lang="ts">
 const { sidebarCollapsed, toggleSidebar } = useAppState()
 const { traces, errorLogs } = useTracing()
+const { user, logout } = useAuth()
+
+const userInitials = computed(() => {
+  const name = user.value?.displayName ?? 'Guest'
+  return name.split(/\s+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase() || '?'
+})
 
 interface NavEntry {
   to: string
@@ -74,11 +80,12 @@ function isActive(item: NavEntry) {
 
     <div class="sidebar-bottom">
       <div class="user-card">
-        <div class="user-av">OA</div>
+        <div class="user-av">{{ userInitials }}</div>
         <div class="user-info">
-          <div class="user-name">Ops Admin</div>
-          <div class="user-role">SRE · Platform Team</div>
+          <div class="user-name">{{ user?.displayName ?? 'Guest' }}</div>
+          <div class="user-role">{{ user?.role ?? 'Not signed in' }}</div>
         </div>
+        <button class="user-logout" title="Sign out" @click="logout">⎋</button>
       </div>
     </div>
   </aside>

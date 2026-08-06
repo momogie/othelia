@@ -11,6 +11,18 @@
   },
   "AllowedHosts": "*",
 
+  "Auth": {
+    "Users": [
+      {
+        "Username": "admin",
+        "Password": "admin123",
+        "DisplayName": "Admin",
+        "Role": "Admin"
+      }
+    ],
+    "CookieExpireHours": 12
+  },
+
   "Tracing": {
     "Ingestion": {
       "Enabled": true,
