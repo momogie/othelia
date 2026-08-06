@@ -1,5 +1,5 @@
 import type { Attr, EventVM, ServiceNodeVM, SpanVM, TraceVM, TraceStatus } from './mockData'
-import type { ApiSpan, ApiSpanEvent, ApiTraceSummary } from './otelTypes'
+import type { ApiSpan, ApiSpanEvent, ApiSpanLink, ApiTraceSummary } from './otelTypes'
 
 const COLOR_PALETTE = [
   '#4a9eff', '#a855f7', '#3ecf8e', '#f5a623', '#ec4899', '#22d3ee', '#7c5cbf',
@@ -88,6 +88,7 @@ export function mapTraceSummary(api: ApiTraceSummary): TraceVM {
     events: [],
     httpAttrs: [],
     resourceAttrs: [],
+    links: [],
   }
 }
 
@@ -182,6 +183,20 @@ export function collectServiceNodes(apiSpans: ApiSpan[]): ServiceNodeVM[] {
   })
 }
 
+export function collectLinks(apiSpans: ApiSpan[]): { traceId: string; spanId: string; attrs: Attr[] }[] {
+  const links: { traceId: string; spanId: string; attrs: Attr[] }[] = []
+  for (const span of apiSpans) {
+    for (const link of span.links ?? []) {
+      links.push({
+        traceId: link.traceId,
+        spanId: link.spanId,
+        attrs: attrsToArray(link.attributes),
+      })
+    }
+  }
+  return links
+}
+
 export function enrichTrace(trace: TraceVM, apiSpans: ApiSpan[]): TraceVM {
   const spanTree = buildSpanTree(apiSpans)
   const root = apiSpans.find((s) => !s.parentSpanId) ?? apiSpans[0]
@@ -199,7 +214,8 @@ export function enrichTrace(trace: TraceVM, apiSpans: ApiSpan[]): TraceVM {
     events: collectEvents(apiSpans),
     serviceNodes: collectServiceNodes(apiSpans),
     httpAttrs: attrsToArray(root?.attributes),
-    resourceAttrs: [],
+    resourceAttrs: attrsToArray(root?.resourceAttributes),
+    links: collectLinks(apiSpans),
     logs: [],
   }
 }

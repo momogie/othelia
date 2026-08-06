@@ -89,9 +89,14 @@ export function useDashboard() {
 
   const maxThroughput = computed(() => Math.max(1, ...throughput.value.map((p) => p.value)))
 
-  function acknowledgeAlert(id: string) {
-    const alert = alerts.value.find((a) => a.id === id)
-    if (alert) alert.acknowledged = true
+  async function acknowledgeAlert(id: string) {
+    try {
+      await $fetch(`/api/alerts/${encodeURIComponent(id)}/ack`, { method: 'PATCH' })
+      const alert = alerts.value.find((a) => a.id === id)
+      if (alert) alert.acknowledged = true
+    } catch (e) {
+      console.error('Failed to acknowledge alert', e)
+    }
   }
 
   function apply(d: ApiDashboard) {

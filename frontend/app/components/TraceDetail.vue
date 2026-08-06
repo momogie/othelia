@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import type { ApiLog } from '~/utils/otelTypes'
 import type { TraceVM } from '~/utils/mockData'
 
 const props = defineProps<{ trace: TraceVM }>()
 
 const activeTab = ref('waterfall')
 const hoveredSvc = ref<string | null>(null)
+const traceLogs = ref<ApiLog[]>([])
+const logsLoading = ref(false)
 
 const detailTabs = [
   { id: 'waterfall', label: '🌊 Waterfall' },
@@ -18,6 +21,33 @@ const statusTag = computed(() => {
   if (props.trace.status === 'slow') return 'tag-warn'
   return 'tag-ok'
 })
+
+async function loadTraceLogs() {
+  if (traceLogs.value.length || logsLoading.value) return
+  logsLoading.value = true
+  try {
+    traceLogs.value = (await $fetch<ApiLog[]>(`/api/logs`, {
+      query: { traceId: props.trace.id, limit: 100 },
+    })) ?? []
+  } catch (e) {
+    console.error('Failed to load trace logs', e)
+    traceLogs.value = []
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'logs') loadTraceLogs()
+})
+
+function fmtLogTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+const traceLinks = computed(() => props.trace.links ?? [])
 </script>
 
 <template>
@@ -60,7 +90,7 @@ const statusTag = computed(() => {
             </div>
             <div class="toc-metric">
               <span class="toc-metric-label">Services</span>
-              <span class="toc-metric-value" style="color:var(--purple)">{{ trace.serviceCount || 3 }}</span>
+              <span class="toc-metric-value" style="color:var(--purple)">{{ trace.serviceCount || 1 }}</span>
               <span class="toc-metric-sub">Involved</span>
             </div>
             <div class="toc-metric">
@@ -95,11 +125,18 @@ const statusTag = computed(() => {
 
       <template v-if="activeTab === 'logs'">
         <div class="attr-section-title" style="margin-bottom:10px">Trace Logs</div>
-        <div v-for="log in trace.logs" :key="log.id" class="log-entry" :class="log.level">
-          <span class="log-level" :class="`ll-${log.level}`">{{ log.level }}</span>
-          <span class="log-time">{{ log.time }}</span>
-          <span class="log-msg">{{ log.msg }}</span>
-          <span class="log-span">{{ log.span }}</span>
+        <template v-if="traceLogs.length">
+          <div v-for="(log, i) in traceLogs" :key="i" class="log-card" :class="log.severity">
+            <div class="log-head">
+              <span class="log-level" :class="`ll-${log.severity}`">{{ log.severity }}</span>
+              <span class="log-time">{{ fmtLogTime(log.timestamp) }}</span>
+              <span class="log-service">{{ log.serviceName }}</span>
+              <span class="log-msg">{{ log.body || '(no message)' }}</span>
+            </div>
+          </div>
+        </template>
+        <div v-else class="attr-empty" style="padding:20px 0">
+          {{ logsLoading ? 'Loading logs...' : 'No logs recorded for this trace' }}
         </div>
       </template>
 
@@ -114,6 +151,22 @@ const statusTag = computed(() => {
             </div>
             <div class="ev-time">+{{ ev.offset }}</div>
           </div>
+          <div v-if="!trace.events.length" class="attr-empty">No events</div>
+        </div>
+        <div class="trace-overview-card" style="margin-top:12px">
+          <div class="attr-section-title" style="margin-bottom:10px">Span Links</div>
+          <div v-for="link in traceLinks" :key="`${link.traceId}:${link.spanId}`" class="event-row">
+            <div class="ev-icon" style="background:rgba(124,92,191,0.15)">🔗</div>
+            <div style="flex:1">
+              <NuxtLink :to="`/traces/${link.traceId}`" class="log-trace-link">
+                Trace {{ link.traceId }}
+              </NuxtLink>
+              <div v-if="link.attrs.length" class="ev-attrs">
+                {{ link.attrs.map((a) => `${a.key}=${a.val}`).join(' · ') }}
+              </div>
+            </div>
+          </div>
+          <div v-if="!traceLinks.length" class="attr-empty">No links</div>
         </div>
       </template>
 

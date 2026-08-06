@@ -26,7 +26,15 @@ export interface ApiSpan {
   duration: string
   status?: string | null
   attributes?: Record<string, string> | null
+  resourceAttributes?: Record<string, string> | null
   events?: ApiSpanEvent[] | null
+  links?: ApiSpanLink[] | null
+}
+
+export interface ApiSpanLink {
+  traceId: string
+  spanId: string
+  attributes?: Record<string, string> | null
 }
 
 export interface ApiService {
@@ -98,4 +106,55 @@ export interface ApiThroughputSeries {
   windowSeconds: number
   bucketSeconds: number
   points: { time: string; timestamp: string; value: number }[]
+}
+
+export interface ApiMetricName {
+  name: string
+  unit?: string | null
+  dataPoints: number
+  lastSeen: string
+}
+
+export interface ApiMetricPoint {
+  time: string
+  timestamp: string
+  value: number
+}
+
+export interface ApiMetricSeries {
+  metric: string
+  service?: string | null
+  aggregation: string
+  bucketSeconds: number
+  points: ApiMetricPoint[]
+}
+
+export interface ApiServiceMapNode {
+  name: string
+  version?: string | null
+  environment?: string | null
+  totalTraces: number
+  errorSpans: number
+  lastSeen: string
+}
+
+export interface ApiServiceMapEdge {
+  source: string
+  target: string
+  callCount: number
+}
+
+export interface ApiServiceMap {
+  nodes: ApiServiceMapNode[]
+  edges: ApiServiceMapEdge[]
+}
+
+export interface ApiCollector {
+  name: string
+  version?: string | null
+  environment?: string | null
+  running: boolean
+  totalTraces: number
+  errorSpans: number
+  lastSeen: string
 }

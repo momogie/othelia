@@ -1,7 +1,18 @@
 <script setup lang="ts">
 const { sidebarCollapsed, toggleSidebar } = useAppState()
 const { traces, errorLogs } = useTracing()
+const { unacknowledgedAlerts } = useDashboard()
 const { user, logout } = useAuth()
+
+const collectorCount = ref<number | null>(null)
+onMounted(async () => {
+  try {
+    const cols = (await $fetch<{ name: string }[]>('/api/collectors')) ?? []
+    collectorCount.value = cols.length
+  } catch {
+    collectorCount.value = null
+  }
+})
 
 const userInitials = computed(() => {
   const name = user.value?.displayName ?? 'Guest'
@@ -30,8 +41,8 @@ const sections: { label: string; items: NavEntry[] }[] = [
   {
     label: 'Config',
     items: [
-      { to: '/collectors', icon: '⚙️', label: 'Collectors', badge: '3', badgeClass: 'nb-green' },
-      { to: '/alerts', icon: '🔔', label: 'Alerts', badge: '2', badgeClass: 'nb-red' },
+      { to: '/collectors', icon: '⚙️', label: 'Collectors', badge: '', badgeClass: 'nb-green' },
+      { to: '/alerts', icon: '🔔', label: 'Alerts', badge: '', badgeClass: 'nb-red' },
       { to: '/settings', icon: '🛠️', label: 'Settings' },
     ],
   },
@@ -42,6 +53,8 @@ const route = useRoute()
 function badgeText(item: NavEntry) {
   if (item.to === '/traces') return String(traces.value.length)
   if (item.to === '/logs') return String(errorLogs.value)
+  if (item.to === '/alerts') return String(unacknowledgedAlerts.value || '')
+  if (item.to === '/collectors') return collectorCount.value == null ? '' : String(collectorCount.value)
   return item.badge ?? ''
 }
 

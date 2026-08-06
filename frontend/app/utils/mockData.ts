@@ -44,6 +44,7 @@ export interface TraceVM {
   events: EventVM[]
   httpAttrs: Attr[]
   resourceAttrs: Attr[]
+  links?: { traceId: string; spanId: string; attrs: Attr[] }[]
 }
 
 export interface ServiceMapVM { name: string; icon: string; latency: string; status: TraceStatus }
