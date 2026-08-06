@@ -3,8 +3,10 @@ defineProps<{ label: string }>()
 
 const { toggleSidebar } = useAppState()
 const toast = useToast()
+const { refresh } = useTracing()
 
 function onRefresh() {
+  refresh()
   toast.show('Traces refreshed', '🔄', 'info')
 }
 

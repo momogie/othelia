@@ -4,14 +4,18 @@ import type { TraceVM } from '~/utils/mockData'
 const route = useRoute()
 const { findTrace } = useTracing()
 
-const traceId = computed(() => String(route.params.id ?? ''))
-const trace = computed<TraceVM | null>(() => findTrace(traceId.value))
+const trace = ref<TraceVM | null>(null)
 
-watch(traceId, () => {
-  if (!trace.value) {
-    navigateTo('/traces')
-  }
-}, { immediate: true })
+watch(
+  () => route.params.id,
+  async (id) => {
+    trace.value = null
+    const t = await findTrace(String(id))
+    if (t) trace.value = t
+    else navigateTo('/traces')
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -21,7 +25,7 @@ watch(traceId, () => {
     <div v-else class="trace-detail">
       <div class="empty-state">
         <div class="empty-icon">🔭</div>
-        <div class="empty-text">Trace not found — <NuxtLink to="/traces">back to list</NuxtLink></div>
+        <div class="empty-text">Loading trace…</div>
       </div>
     </div>
   </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { TraceVM } from '~/utils/mockData'
 
-const { traces, serviceList } = useTracing()
+const { traces, serviceList, findTrace, refresh, loading } = useTracing()
 
 const searchQuery = ref('')
 const filterStatus = ref('all')
@@ -35,7 +35,12 @@ const filteredTraces = computed(() =>
 
 function selectTrace(trace: TraceVM) {
   activeTraceId.value = trace.id
+  findTrace(trace.id)
 }
+
+onMounted(() => {
+  if (!traces.value.length) refresh()
+})
 </script>
 
 <template>
@@ -83,13 +88,21 @@ function selectTrace(trace: TraceVM) {
         <span class="panel-count">{{ filteredTraces.length }}</span>
       </div>
       <div class="trace-list">
-        <TraceListItem
-          v-for="trace in filteredTraces"
-          :key="trace.id"
-          :trace="trace"
-          :active="activeTraceId === trace.id"
-          @select="selectTrace"
-        />
+        <template v-if="filteredTraces.length">
+          <TraceListItem
+            v-for="trace in filteredTraces"
+            :key="trace.id"
+            :trace="trace"
+            :active="activeTraceId === trace.id"
+            @select="selectTrace"
+          />
+        </template>
+        <div v-else class="empty-state" style="padding:40px 20px;text-align:center">
+          <div class="empty-icon">{{ loading ? '⏳' : '📡' }}</div>
+          <div class="empty-text">
+            {{ loading ? 'Loading traces...' : 'No traces yet — waiting for OTLP data on :4318' }}
+          </div>
+        </div>
       </div>
     </div>
 

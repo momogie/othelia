@@ -11,9 +11,13 @@ const {
   acknowledgeAlert,
 } = useDashboard()
 
-const { traces } = useTracing()
+const { traces, refresh: refreshTraces } = useTracing()
 
 const recentTraces = computed(() => traces.value.slice(0, 5))
+
+onMounted(() => {
+  if (!traces.value.length) refreshTraces()
+})
 
 function statusColor(status: string) {
   if (status === 'error') return 'var(--red)'
@@ -180,7 +184,7 @@ function statusCodeClass(code: number) {
               <div class="rt-bottom">
                 <span class="rt-svc">{{ trace.service }}</span>
                 <span class="rt-method" :class="methodClass(trace.method)">{{ trace.method }}</span>
-                <span class="rt-status-code" :class="statusCodeClass(trace.statusCode)">{{ trace.statusCode }}</span>
+                <span class="rt-status-code" :class="statusCodeClass(trace.statusCode)">{{ trace.statusCode || '—' }}</span>
                 <span class="rt-time">{{ trace.time }}</span>
               </div>
             </NuxtLink>

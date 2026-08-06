@@ -20,7 +20,7 @@ const emit = defineEmits<{ select: [trace: TraceVM] }>()
     <div class="ti-mid">
       <span class="ti-service">{{ trace.service }}</span>
       <span class="ti-method" :class="`method-${trace.method}`">{{ trace.method }}</span>
-      <span class="ti-status-code" :class="statusCodeClass(trace.statusCode)">{{ trace.statusCode }}</span>
+      <span class="ti-status-code" :class="statusCodeClass(trace.statusCode)">{{ trace.statusCode || '—' }}</span>
       <span class="ti-path">{{ trace.path }}</span>
     </div>
     <div class="ti-bot">

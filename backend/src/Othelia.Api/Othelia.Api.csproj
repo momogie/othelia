@@ -7,8 +7,26 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.79" />
+    <PackageReference Include="Google.Protobuf" Version="3.35.1" />
+    <PackageReference Include="Grpc.Tools" Version="2.83.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.2" />
     <PackageReference Include="Microsoft.OpenApi" Version="2.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\opentelemetry\proto\common\v1\common.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\opentelemetry\proto\resource\v1\resource.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\opentelemetry\proto\trace\v1\trace.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\opentelemetry\proto\collector\trace\v1\trace_service.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\opentelemetry\proto\metrics\v1\metrics.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\opentelemetry\proto\collector\metrics\v1\metrics_service.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\opentelemetry\proto\logs\v1\logs.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\opentelemetry\proto\collector\logs\v1\logs_service.proto" GrpcServices="None" ProtoRoot="Protos" />
   </ItemGroup>
 
 </Project>

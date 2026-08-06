@@ -10,14 +10,15 @@ import {
   allLogsData,
   collectorsData,
   globalMetricsData,
-  mockTraces,
   serviceMapData,
   serviceRatesData,
   svcMetricsData,
 } from '../utils/mockData'
+import type { ApiSpan, ApiTraceSummary } from '~/utils/otelTypes'
+import { enrichTrace, mapTraceSummary } from '~/utils/traceMapper'
 
 export function useTracing() {
-  const traces = useState<TraceVM[]>('traces', () => [...mockTraces])
+  const traces = useState<TraceVM[]>('traces', () => [])
   const allLogs = useState<LogVM[]>('logs', () => [...allLogsData])
   const serviceMap = useState<ServiceMapVM[]>('serviceMap', () => [...serviceMapData])
   const svcMetrics = useState<MetricVM[]>('svcMetrics', () => [...svcMetricsData])
@@ -27,24 +28,48 @@ export function useTracing() {
   const loading = useState<boolean>('tracingLoading', () => false)
 
   const serviceList = computed(() => [...new Set(traces.value.map((t) => t.service))])
-  const errorLogs = computed(() => allLogs.value.filter((l) => l.level === 'ERROR').length)
+  const errorLogs = computed(() => traces.value.reduce((sum, t) => sum + (t.errorSpans || 0), 0))
 
   async function refresh() {
     loading.value = true
     try {
-      const data = await $fetch<unknown[]>('/api/traces?limit=100')
-      if (Array.isArray(data) && data.length) {
-        traces.value = data as TraceVM[]
-      }
-    } catch {
-      traces.value = [...mockTraces]
+      const data = await $fetch<ApiTraceSummary[]>('/api/traces?limit=100')
+      traces.value = (data ?? []).map(mapTraceSummary)
+    } catch (e) {
+      console.error('Failed to load traces', e)
+      traces.value = []
     } finally {
       loading.value = false
     }
   }
 
-  function findTrace(id: string) {
-    return traces.value.find((t) => t.id === id)
+  async function loadSpans(traceId: string): Promise<ApiSpan[]> {
+    const data = await $fetch<ApiSpan[]>(`/api/traces/${encodeURIComponent(traceId)}/spans`)
+    return data ?? []
+  }
+
+  async function findTrace(id: string): Promise<TraceVM | null> {
+    let trace = traces.value.find((t) => t.id === id) ?? null
+    if (!trace) {
+      try {
+        const list = await $fetch<ApiTraceSummary[]>(`/api/traces?traceId=${encodeURIComponent(id)}&limit=1`)
+        const first = list?.[0]
+        if (!first) return null
+        trace = mapTraceSummary(first)
+      } catch {
+        return null
+      }
+    }
+    if (trace.spanTree.length) return trace
+    try {
+      const spans = await loadSpans(id)
+      const enriched = enrichTrace(trace, spans)
+      traces.value = traces.value.map((t) => (t.id === id ? enriched : t))
+      return enriched
+    } catch (e) {
+      console.error('Failed to load spans', e)
+      return trace
+    }
   }
 
   return {

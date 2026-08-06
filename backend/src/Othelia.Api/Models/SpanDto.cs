@@ -12,4 +12,5 @@ public sealed record SpanDto
     public TimeSpan Duration { get; init; }
     public string? Status { get; init; }
     public IReadOnlyDictionary<string, string>? Attributes { get; init; }
+    public IReadOnlyList<SpanEventDto>? Events { get; init; }
 }
