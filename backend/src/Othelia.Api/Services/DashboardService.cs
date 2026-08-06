@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Options;
 using Othelia.Api.Models;
 using Othelia.Api.Observability;
 
@@ -16,17 +15,18 @@ public sealed class DashboardService : IDashboardService
     private const double ErrorRateDownThreshold = 5.0;
 
     private readonly ITelemetryStore _store;
-    private readonly TracingOptions _options;
+    private readonly ITracingOptionsResolver _resolver;
 
-    public DashboardService(ITelemetryStore store, IOptions<TracingOptions> options)
+    public DashboardService(ITelemetryStore store, ITracingOptionsResolver resolver)
     {
         _store = store;
-        _options = options.Value;
+        _resolver = resolver;
     }
 
     public async Task<DashboardDto> GetAsync(string? service, CancellationToken ct = default)
     {
-        var query = _options.Query;
+        var opts = await _resolver.ResolveAsync(ct);
+        var query = opts.Query;
         var windowSeconds = Math.Max(60, query.DashboardWindowSeconds);
         var buckets = Math.Max(1, query.DashboardBuckets);
         var bucketSeconds = Math.Max(60, windowSeconds / buckets);
@@ -36,11 +36,11 @@ public sealed class DashboardService : IDashboardService
 
         var aggregate = await _store.QueryDashboardAggregateAsync(fromUtc, bucketSeconds, service, ct);
 
-        var alerts = await BuildAlertsAsync(fromUtc, query.SlowThresholdMs, service, ct);
+        var alerts = await BuildAlertsAsync(fromUtc, Math.Max(1, query.SlowThresholdMs), service, ct);
 
-        var metrics = BuildMetrics(aggregate, windowSeconds);
+        var metrics = BuildMetrics(aggregate, windowSeconds, Math.Max(1, query.SlowThresholdMs));
         var throughput = BuildThroughput(aggregate, fromUtc, bucketSeconds, buckets);
-        var services = BuildServices(aggregate, windowSeconds, query.SlowThresholdMs);
+        var services = BuildServices(aggregate, windowSeconds, Math.Max(1, query.SlowThresholdMs));
 
         return new DashboardDto
         {
@@ -54,13 +54,13 @@ public sealed class DashboardService : IDashboardService
         };
     }
 
-    private DashboardMetricsDto BuildMetrics(DashboardAggregate aggregate, int windowSeconds)
+    private DashboardMetricsDto BuildMetrics(DashboardAggregate aggregate, int windowSeconds, int slowThresholdMs)
     {
         var totalTraces = aggregate.TotalTraces;
         var errorRate = totalTraces > 0 ? aggregate.ErrorTraces / (double)totalTraces * 100.0 : 0.0;
 
         var stats = aggregate.ServiceStats;
-        var services = BuildServices(aggregate, windowSeconds, _options.Query.SlowThresholdMs);
+        var services = BuildServices(aggregate, windowSeconds, slowThresholdMs);
         var servicesDown = services.Count(s => s.Status == "error");
         var servicesUp = services.Count - servicesDown;
 

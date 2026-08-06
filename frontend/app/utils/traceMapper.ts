@@ -35,6 +35,7 @@ export function formatDuration(ms: number): string {
 
 function toStatus(status?: string | null, httpCode?: number): TraceStatus {
   if (status === 'Error' || (httpCode && httpCode >= 400)) return 'error'
+  if (status === 'Slow') return 'slow'
   return 'ok'
 }
 
@@ -73,7 +74,7 @@ export function mapTraceSummary(api: ApiTraceSummary): TraceVM {
     method: extractMethod(api.name),
     path: extractPath(api.name),
     statusCode: 0,
-    status: api.status === 'error' ? 'error' : 'ok',
+    status: api.status === 'error' ? 'error' : api.status === 'slow' ? 'slow' : 'ok',
     duration: formatDuration(durMs),
     durMs,
     spans: api.spanCount,
@@ -190,7 +191,7 @@ export function enrichTrace(trace: TraceVM, apiSpans: ApiSpan[]): TraceVM {
 
   return {
     ...trace,
-    status: spanTree.some((s) => s.status === 'error') ? 'error' : 'ok',
+    status: spanTree.some((s) => s.status === 'error') ? 'error' : trace.status,
     errorSpans: spanTree.filter((s) => s.status === 'error').length,
     serviceCount: collectServiceNodes(apiSpans).length,
     statusCode: httpCode,

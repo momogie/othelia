@@ -33,10 +33,14 @@ public static class OtlpEndpoints
         var logger = loggerFactory.CreateLogger("Otlp.Traces");
         try
         {
-            var request = await ReadRequestAsync<ExportTraceServiceRequest>(context.Request, context.RequestAborted);
+            var options = await resolver.ResolveAsync(context.RequestAborted);
+
+            if (!IsAuthorized(context, options))
+                return Results.Problem("Invalid or missing OTLP API token.", statusCode: StatusCodes.Status401Unauthorized);
+
+            var request = await ReadRequestAsync<ExportTraceServiceRequest>(context.Request, options.Ingestion.MaxPayloadBytes, context.RequestAborted);
             var spans = OtlpTraceConverter.ConvertRequest(request);
 
-            var options = await resolver.ResolveAsync(context.RequestAborted);
             if (!options.Ingestion.Enabled)
             {
                 logger.LogDebug("Trace ingestion disabled; accepted and dropped {Count} spans.", spans.Count);
@@ -54,6 +58,10 @@ public static class OtlpEndpoints
         {
             return Results.Problem(ex.Message, statusCode: StatusCodes.Status415UnsupportedMediaType);
         }
+        catch (PayloadTooLargeException)
+        {
+            return Results.Problem("OTLP payload too large.", statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
         catch (Exception ex) when (ex is InvalidProtocolBufferException or InvalidDataException or FormatException)
         {
             return Results.Problem("Invalid OTLP trace payload.", statusCode: StatusCodes.Status400BadRequest);
@@ -65,12 +73,20 @@ public static class OtlpEndpoints
         }
     }
 
-    private static async Task<IResult> HandleMetricsAsync(HttpContext context, ILoggerFactory loggerFactory)
+    private static async Task<IResult> HandleMetricsAsync(
+        HttpContext context,
+        ITracingOptionsResolver resolver,
+        ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger("Otlp.Metrics");
         try
         {
-            var request = await ReadRequestAsync<ExportMetricsServiceRequest>(context.Request, context.RequestAborted);
+            var options = await resolver.ResolveAsync(context.RequestAborted);
+
+            if (!IsAuthorized(context, options))
+                return Results.Problem("Invalid or missing OTLP API token.", statusCode: StatusCodes.Status401Unauthorized);
+
+            var request = await ReadRequestAsync<ExportMetricsServiceRequest>(context.Request, options.Ingestion.MaxPayloadBytes, context.RequestAborted);
             var count = request.ResourceMetrics.Sum(rm => rm.ScopeMetrics.Sum(sm => sm.Metrics.Count));
             logger.LogDebug("Received {Count} metrics (not persisted in Phase 1).", count);
             return Results.Bytes(Array.Empty<byte>(), "application/x-protobuf");
@@ -78,6 +94,10 @@ public static class OtlpEndpoints
         catch (UnsupportedContentTypeException ex)
         {
             return Results.Problem(ex.Message, statusCode: StatusCodes.Status415UnsupportedMediaType);
+        }
+        catch (PayloadTooLargeException)
+        {
+            return Results.Problem("OTLP payload too large.", statusCode: StatusCodes.Status413PayloadTooLarge);
         }
         catch (Exception ex) when (ex is InvalidProtocolBufferException or InvalidDataException or FormatException)
         {
@@ -99,10 +119,14 @@ public static class OtlpEndpoints
         var logger = loggerFactory.CreateLogger("Otlp.Logs");
         try
         {
-            var request = await ReadRequestAsync<ExportLogsServiceRequest>(context.Request, context.RequestAborted);
+            var options = await resolver.ResolveAsync(context.RequestAborted);
+
+            if (!IsAuthorized(context, options))
+                return Results.Problem("Invalid or missing OTLP API token.", statusCode: StatusCodes.Status401Unauthorized);
+
+            var request = await ReadRequestAsync<ExportLogsServiceRequest>(context.Request, options.Ingestion.MaxPayloadBytes, context.RequestAborted);
             var logs = OtlpLogConverter.ConvertRequest(request);
 
-            var options = await resolver.ResolveAsync(context.RequestAborted);
             if (!options.Ingestion.Enabled)
             {
                 logger.LogDebug("Log ingestion disabled; accepted and dropped {Count} logs.", logs.Count);
@@ -116,6 +140,10 @@ public static class OtlpEndpoints
         {
             return Results.Problem(ex.Message, statusCode: StatusCodes.Status415UnsupportedMediaType);
         }
+        catch (PayloadTooLargeException)
+        {
+            return Results.Problem("OTLP payload too large.", statusCode: StatusCodes.Status413PayloadTooLarge);
+        }
         catch (Exception ex) when (ex is InvalidProtocolBufferException or InvalidDataException or FormatException)
         {
             return Results.Problem("Invalid OTLP logs payload.", statusCode: StatusCodes.Status400BadRequest);
@@ -127,7 +155,17 @@ public static class OtlpEndpoints
         }
     }
 
-    private static async Task<T> ReadRequestAsync<T>(HttpRequest request, CancellationToken ct)
+    private static bool IsAuthorized(HttpContext context, TracingOptions options)
+    {
+        var expected = options.Ingestion.ApiKey;
+        if (string.IsNullOrWhiteSpace(expected))
+            return true;
+
+        var actual = context.Request.Headers["X-Otlp-Token"].ToString();
+        return string.Equals(actual, expected, StringComparison.Ordinal);
+    }
+
+    private static async Task<T> ReadRequestAsync<T>(HttpRequest request, long maxBytes, CancellationToken ct)
         where T : IMessage<T>, new()
     {
         var contentType = request.ContentType ?? string.Empty;
@@ -138,6 +176,9 @@ public static class OtlpEndpoints
 
         var parser = new MessageParser<T>(() => new T());
         Stream body = request.Body;
+
+        if (!isGzip && request.ContentLength.HasValue && request.ContentLength.Value > maxBytes)
+            throw new PayloadTooLargeException();
 
         if (isGzip)
         {
@@ -153,15 +194,13 @@ public static class OtlpEndpoints
 
         if (isProtobuf)
         {
-            using var buffer = new MemoryStream();
-            await body.CopyToAsync(buffer, ct);
+            using var buffer = await ReadCappedAsync(body, maxBytes, ct);
             return parser.ParseFrom(buffer.ToArray());
         }
 
         if (isJson)
         {
-            using var buffer = new MemoryStream();
-            await body.CopyToAsync(buffer, ct);
+            using var buffer = await ReadCappedAsync(body, maxBytes, ct);
             var bytes = buffer.ToArray();
             if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
                 bytes = bytes[3..];
@@ -169,6 +208,30 @@ public static class OtlpEndpoints
         }
 
         throw new UnsupportedContentTypeException($"Unsupported OTLP content type '{contentType}'.");
+    }
+
+    private static async Task<MemoryStream> ReadCappedAsync(Stream body, long maxBytes, CancellationToken ct)
+    {
+        var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        long total = 0;
+        int read;
+        while ((read = await body.ReadAsync(chunk, ct)) > 0)
+        {
+            total += read;
+            if (total > maxBytes)
+            {
+                buffer.Dispose();
+                throw new PayloadTooLargeException();
+            }
+            await buffer.WriteAsync(chunk.AsMemory(0, read), ct);
+        }
+        return buffer;
+    }
+
+    private sealed class PayloadTooLargeException : Exception
+    {
+        public PayloadTooLargeException() : base("OTLP payload too large.") { }
     }
 
     private sealed class UnsupportedContentTypeException : Exception

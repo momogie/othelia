@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Options;
 using Othelia.Api.Models;
 using Othelia.Api.Observability;
 using System.Text.Json;
@@ -10,17 +9,18 @@ public sealed class TracingService : ITracingService
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly ITelemetryStore _store;
-    private readonly TracingOptions _options;
+    private readonly ITracingOptionsResolver _resolver;
 
-    public TracingService(ITelemetryStore store, IOptions<TracingOptions> options)
+    public TracingService(ITelemetryStore store, ITracingOptionsResolver resolver)
     {
         _store = store;
-        _options = options.Value;
+        _resolver = resolver;
     }
 
     public async Task<IReadOnlyList<ServiceDto>> GetServicesAsync(CancellationToken ct = default)
     {
-        var from = DateTime.UtcNow.AddSeconds(-_options.Query.DefaultLookbackSeconds);
+        var opts = await _resolver.ResolveAsync(ct);
+        var from = DateTime.UtcNow.AddSeconds(-Math.Max(0, opts.Query.DefaultLookbackSeconds));
         var rows = await _store.QueryServicesAsync(from, ct);
 
         return rows.Select(r => new ServiceDto
@@ -38,12 +38,13 @@ public sealed class TracingService : ITracingService
         TraceQuery query,
         CancellationToken ct = default)
     {
+        var opts = await _resolver.ResolveAsync(ct);
+        var maxLimit = Math.Max(1, opts.Query.MaxTracesPerRequest);
         var effectiveQuery = query with
         {
-            FromUtc = query.FromUtc ?? DateTime.UtcNow.AddSeconds(-_options.Query.DefaultLookbackSeconds),
-            SlowThresholdMs = query.SlowThresholdMs ?? _options.Query.SlowThresholdMs,
-            Limit = Math.Clamp(query.Limit > 0 ? query.Limit : _options.Query.MaxTracesPerRequest,
-                1, _options.Query.MaxTracesPerRequest),
+            FromUtc = query.FromUtc ?? DateTime.UtcNow.AddSeconds(-Math.Max(0, opts.Query.DefaultLookbackSeconds)),
+            SlowThresholdMs = query.SlowThresholdMs ?? Math.Max(1, opts.Query.SlowThresholdMs),
+            Limit = Math.Clamp(query.Limit > 0 ? query.Limit : maxLimit, 1, maxLimit),
         };
 
         var rows = await _store.QueryRecentTracesAsync(effectiveQuery, ct);
@@ -56,7 +57,11 @@ public sealed class TracingService : ITracingService
             StartTime = new DateTimeOffset(r.StartTimeUtc, TimeSpan.Zero),
             Duration = TimeSpan.FromMilliseconds(r.DurationUs / 1000.0),
             SpanCount = r.SpanCount,
-            Status = r.HasError ? "error" : "ok",
+            Status = r.HasError
+                ? "error"
+                : r.DurationUs >= effectiveQuery.SlowThresholdMs * 1000L
+                    ? "slow"
+                    : "ok",
             Tags = r.Tags?.Split(',', StringSplitOptions.RemoveEmptyEntries),
         }).ToList();
 
@@ -85,11 +90,12 @@ public sealed class TracingService : ITracingService
 
     public async Task<LogQueryResult> GetLogsAsync(LogQuery query, CancellationToken ct = default)
     {
+        var opts = await _resolver.ResolveAsync(ct);
+        var maxLimit = Math.Max(1, opts.Query.MaxTracesPerRequest);
         var effectiveQuery = query with
         {
-            FromUtc = query.FromUtc ?? DateTime.UtcNow.AddSeconds(-_options.Query.DefaultLookbackSeconds),
-            Limit = Math.Clamp(query.Limit > 0 ? query.Limit : _options.Query.MaxTracesPerRequest,
-                1, _options.Query.MaxTracesPerRequest),
+            FromUtc = query.FromUtc ?? DateTime.UtcNow.AddSeconds(-Math.Max(0, opts.Query.DefaultLookbackSeconds)),
+            Limit = Math.Clamp(query.Limit > 0 ? query.Limit : maxLimit, 1, maxLimit),
         };
 
         var rows = await _store.QueryLogsAsync(effectiveQuery, ct);

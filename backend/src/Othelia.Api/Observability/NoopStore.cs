@@ -41,4 +41,6 @@ public sealed class NoopTelemetryStore : ITelemetryStore
         => Task.FromResult<IReadOnlyList<LogRow>>(Array.Empty<LogRow>());
 
     public Task<long> DeleteLogsOlderThanAsync(DateTime olderThanUtc, CancellationToken ct) => Task.FromResult(0L);
+
+    public Task<bool> IsHealthyAsync(CancellationToken ct) => Task.FromResult(true);
 }

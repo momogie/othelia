@@ -16,6 +16,7 @@ public interface ITelemetryStore
     Task InsertLogsAsync(IReadOnlyList<LogRecord> logs, CancellationToken ct);
     Task<IReadOnlyList<LogRow>> QueryLogsAsync(LogQuery query, CancellationToken ct);
     Task<long> DeleteLogsOlderThanAsync(DateTime olderThanUtc, CancellationToken ct);
+    Task<bool> IsHealthyAsync(CancellationToken ct);
 }
 
 public sealed class TelemetryStore : ITelemetryStore
@@ -104,7 +105,7 @@ Agg AS (
     SELECT s.TraceId,
            MIN(s.StartTimeUtc) AS StartTimeUtc,
            MAX(s.EndTimeUtc) AS EndTimeUtc,
-           DATEDIFF(MICROSECOND, MIN(s.StartTimeUtc), MAX(s.EndTimeUtc)) AS DurationUs,
+           DATEDIFF_BIG(MICROSECOND, MIN(s.StartTimeUtc), MAX(s.EndTimeUtc)) AS DurationUs,
            COUNT(*) AS SpanCount,
            MAX(CASE WHEN s.StatusCode = N'Error' THEN 1 ELSE 0 END) AS HasError,
            (SELECT STRING_AGG(svc.ServiceName, N',')
@@ -214,10 +215,19 @@ LEFT JOIN Roots r ON r.TraceId = a.TraceId AND r.rn = 1";
 
     public async Task<long> DeleteSpansOlderThanAsync(DateTime olderThanUtc, CancellationToken ct)
     {
-        const string sql = "DELETE FROM dbo.Spans WHERE StartTimeUtc < @OlderThanUtc;";
+        const string sql = "DELETE TOP (@BatchSize) FROM dbo.Spans WHERE StartTimeUtc < @OlderThanUtc;";
         await using var connection = OpenConnection();
-        return await connection.ExecuteAsync(new CommandDefinition(sql,
-            new { OlderThanUtc = olderThanUtc }, cancellationToken: ct));
+        const int batch = 5000;
+        long total = 0;
+        while (!ct.IsCancellationRequested)
+        {
+            var deleted = await connection.ExecuteAsync(new CommandDefinition(sql,
+                new { OlderThanUtc = olderThanUtc, BatchSize = batch }, cancellationToken: ct));
+            total += deleted;
+            if (deleted < batch)
+                break;
+        }
+        return total;
     }
 
     public async Task InsertLogsAsync(IReadOnlyList<LogRecord> logs, CancellationToken ct)
@@ -346,10 +356,33 @@ FROM dbo.Logs";
 
     public async Task<long> DeleteLogsOlderThanAsync(DateTime olderThanUtc, CancellationToken ct)
     {
-        const string sql = "DELETE FROM dbo.Logs WHERE TimestampUtc < @OlderThanUtc;";
+        const string sql = "DELETE TOP (@BatchSize) FROM dbo.Logs WHERE TimestampUtc < @OlderThanUtc;";
         await using var connection = OpenConnection();
-        return await connection.ExecuteAsync(new CommandDefinition(sql,
-            new { OlderThanUtc = olderThanUtc }, cancellationToken: ct));
+        const int batch = 5000;
+        long total = 0;
+        while (!ct.IsCancellationRequested)
+        {
+            var deleted = await connection.ExecuteAsync(new CommandDefinition(sql,
+                new { OlderThanUtc = olderThanUtc, BatchSize = batch }, cancellationToken: ct));
+            total += deleted;
+            if (deleted < batch)
+                break;
+        }
+        return total;
+    }
+
+    public async Task<bool> IsHealthyAsync(CancellationToken ct)
+    {
+        try
+        {
+            await using var connection = OpenConnection();
+            await connection.ExecuteScalarAsync<int>(new CommandDefinition("SELECT 1;", cancellationToken: ct));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string EscapeLike(string value) => value
@@ -361,7 +394,7 @@ FROM dbo.Logs";
     public async Task<IReadOnlyList<SpanRecord>> QuerySpansAsync(string traceId, CancellationToken ct)
     {
         const string sql = @"
-SELECT TraceId, SpanId, ParentSpanId, [Name], ServiceName, Kind,
+SELECT TOP (5000) TraceId, SpanId, ParentSpanId, [Name], ServiceName, Kind,
        StartTimeUtc, EndTimeUtc, DurationUs, StatusCode, StatusMessage,
        HttpMethod, HttpPath, HttpStatusCode,
        ServiceVersion, ServiceEnvironment,
@@ -441,7 +474,7 @@ CROSS JOIN (SELECT COUNT(*) AS TotalSpans
 
         const string percentileSql = @"
 ;WITH Agg AS (
-    SELECT DATEDIFF(MICROSECOND, MIN(StartTimeUtc), MAX(EndTimeUtc)) AS DurationUs
+    SELECT DATEDIFF_BIG(MICROSECOND, MIN(StartTimeUtc), MAX(EndTimeUtc)) AS DurationUs
     FROM dbo.Spans
     WHERE StartTimeUtc >= @FromUtc
       AND (@Service IS NULL OR EXISTS (SELECT 1 FROM dbo.Spans s2 WHERE s2.TraceId = dbo.Spans.TraceId AND s2.ServiceName = @Service))

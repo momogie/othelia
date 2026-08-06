@@ -88,7 +88,11 @@ function applyData() {
   const c = chart.value
   if (!c || !ready.value) return
   const incoming = props.points.map((p) => ({ x: new Date(p.timestamp).getTime(), y: p.value }))
-  if (!incoming.length) return
+  if (!incoming.length) {
+    seriesData.value = []
+    c.updateSeries([{ data: [] }])
+    return
+  }
 
   if (props.animated) {
     if (!seriesData.value.length) {

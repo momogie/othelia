@@ -1,13 +1,11 @@
 import type {
   CollectorVM,
-  LogVM,
   MetricVM,
   RateVM,
   ServiceMapVM,
   TraceVM,
 } from '../utils/mockData'
 import {
-  allLogsData,
   collectorsData,
   globalMetricsData,
   serviceMapData,
@@ -36,7 +34,6 @@ export const DEFAULT_PAGE_SIZE = 50
 export function useTracing() {
   const traces = useState<TraceVM[]>('traces', () => [])
   const total = useState<number>('tracesTotal', () => 0)
-  const allLogs = useState<LogVM[]>('logs', () => [...allLogsData])
   const serviceMap = useState<ServiceMapVM[]>('serviceMap', () => [...serviceMapData])
   const svcMetrics = useState<MetricVM[]>('svcMetrics', () => [...svcMetricsData])
   const globalMetrics = useState<MetricVM[]>('globalMetrics', () => [...globalMetricsData])
@@ -164,7 +161,6 @@ export function useTracing() {
 
   return {
     traces,
-    allLogs,
     serviceMap,
     svcMetrics,
     globalMetrics,

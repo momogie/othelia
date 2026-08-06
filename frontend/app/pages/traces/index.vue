@@ -72,6 +72,7 @@ function clearAdvancedFilters() {
 function setRange(range: string) {
   activeTimeRange.value = range
   filter.value.from = new Date(Date.now() - (rangeSeconds[range] ?? 900) * 1000).toISOString()
+  filter.value.to = null
   refresh()
 }
 

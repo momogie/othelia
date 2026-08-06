@@ -12,6 +12,8 @@ public sealed class TracingIngestionOptions
 {
     public bool Enabled { get; set; } = true;
     public string? Endpoint { get; set; } = "http://localhost:4318";
+    public string? ApiKey { get; set; }
+    public long MaxPayloadBytes { get; set; } = 32 * 1024 * 1024;
     public List<IngestionFilterRule> Rules { get; set; } = new();
 }
 

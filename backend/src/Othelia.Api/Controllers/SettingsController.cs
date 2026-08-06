@@ -30,8 +30,27 @@ public sealed class SettingsController : ControllerBase
         if (patch is null)
             return BadRequest(new { error = "Request body is required." });
 
+        var validationError = Validate(patch);
+        if (validationError is not null)
+            return BadRequest(new { error = validationError });
+
         await _resolver.SaveAsync(patch, ct);
         return Ok(await _resolver.ResolveAsync(ct));
+    }
+
+    private static string? Validate(TracingSettingsPatch patch)
+    {
+        if (patch.QueryMaxTracesPerRequest is < 1)
+            return "QueryMaxTracesPerRequest must be at least 1.";
+        if (patch.QueryDefaultLookbackSeconds is < 0)
+            return "QueryDefaultLookbackSeconds must not be negative.";
+        if (patch.QuerySlowThresholdMs is < 1)
+            return "QuerySlowThresholdMs must be at least 1.";
+        if (patch.RetentionDays is < 0)
+            return "RetentionDays must not be negative.";
+        if (patch.RetentionCleanupIntervalHours is < 1)
+            return "RetentionCleanupIntervalHours must be at least 1.";
+        return null;
     }
 
     [HttpDelete]

@@ -12,7 +12,7 @@ export interface LogFilterState {
 export const LOG_PAGE_SIZE = 50
 
 export function useLogs() {
-  const logs = useState<ApiLog[]>('logs', () => [])
+  const logs = useState<ApiLog[]>('logsList', () => [])
   const total = useState<number>('logsTotal', () => 0)
   const loading = useState<boolean>('logsLoading', () => false)
   const loadingMore = useState<boolean>('logsLoadingMore', () => false)
