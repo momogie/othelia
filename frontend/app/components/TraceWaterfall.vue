@@ -29,6 +29,12 @@ function isDimmed(service: string): boolean {
       <div style="width:52px; font-size:10.5px; color:var(--text3); text-align:right">Duration</div>
     </div>
 
+    <div class="wf-legend">
+      <span class="wf-legend-item"><i class="wf-legend-dot" style="background:#22d3ee"></i>query</span>
+      <span class="wf-legend-item"><i class="wf-legend-dot" style="background:#a855f7"></i>method</span>
+      <span class="wf-legend-item"><i class="wf-legend-dot" style="background:#4a9eff"></i>http</span>
+    </div>
+
     <div
       v-for="span in trace.spanTree"
       :key="span.id"
@@ -50,7 +56,7 @@ function isDimmed(service: string): boolean {
       <div class="wf-bar-cell">
         <div
           class="wf-bar"
-          :style="{ left: `${span.offsetPct}%`, width: `${Math.max(span.widthPct, 0.5)}%`, background: `${span.color}bb` }"
+          :style="{ left: `${span.offsetPct}%`, width: `${Math.max(span.widthPct, 0.5)}%`, background: `${span.barColor}bb` }"
         >
           <span class="wf-bar-label">{{ span.duration }}</span>
         </div>

@@ -12,6 +12,7 @@ export interface SpanVM {
   status: TraceStatus
   attrs: Attr[]
   color: string
+  barColor: string
   offsetPct: number
   widthPct: number
   duration: string
@@ -65,10 +66,15 @@ export const spanColors: Record<string, string> = {
   db: '#7c5cbf',
 }
 
-function makeSpanTree(totalMs: number, spans: Omit<SpanVM, 'color' | 'offsetPct' | 'widthPct' | 'duration'>[]) {
+function makeSpanTree(totalMs: number, spans: Omit<SpanVM, 'color' | 'barColor' | 'offsetPct' | 'widthPct' | 'duration'>[]) {
   return spans.map((s) => ({
     ...s,
     color: spanColors[s.service] || '#9898b8',
+    barColor:
+      s.durationMs < 200 ? '#22c55e'
+      : s.durationMs < 1000 ? '#eab308'
+      : s.durationMs < 60000 ? '#ef4444'
+      : '#7f1d1d',
     offsetPct: (s.offset / totalMs) * 100,
     widthPct: (s.durationMs / totalMs) * 100,
     duration: `${s.durationMs}ms`,

@@ -16,6 +16,25 @@ function colorForService(name: string): string {
   return COLOR_PALETTE[hashCode(name) % COLOR_PALETTE.length] ?? '#9898b8'
 }
 
+const SPAN_DOT_COLORS: Record<string, string> = {
+  Internal: '#a855f7', // method / pipeline span
+  Client: '#22d3ee', // db query / outbound
+  Server: '#4a9eff', // http request
+  Producer: '#f5a623',
+  Consumer: '#3ecf8e',
+}
+
+function colorForSpan(s: ApiSpan): string {
+  return SPAN_DOT_COLORS[s.kind] ?? colorForService(s.serviceName)
+}
+
+export function barColorForDuration(durMs: number): string {
+  if (durMs < 200) return '#22c55e' // hijau
+  if (durMs < 1000) return '#eab308' // kuning
+  if (durMs < 60000) return '#ef4444' // merah
+  return '#7f1d1d' // dark red (> 1 menit)
+}
+
 export function timespanToMs(ts: string): number {
   if (!ts) return 0
   const m = /^(\d+):(\d+):(\d+)(?:\.(\d{1,7}))?$/.exec(ts)
@@ -120,7 +139,8 @@ export function buildSpanTree(apiSpans: ApiSpan[]): SpanVM[] {
       const httpCode = Number(
         s.attributes?.['http.response.status_code'] ?? s.attributes?.['http.status_code'] ?? 0,
       ) || undefined
-      const color = colorForService(s.serviceName)
+      const color = colorForSpan(s)
+      const barColor = barColorForDuration(durMs)
       return {
         id: s.spanId,
         name: s.name,
@@ -131,6 +151,7 @@ export function buildSpanTree(apiSpans: ApiSpan[]): SpanVM[] {
         status: toStatus(s.status, httpCode),
         attrs: attrsToArray(s.attributes),
         color,
+        barColor,
         offsetPct: total ? (Math.max(0, start - traceStart) / total) * 100 : 0,
         widthPct: total ? (durMs / total) * 100 : 100,
         duration: formatDuration(durMs),
