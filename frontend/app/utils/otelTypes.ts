@@ -102,6 +102,19 @@ export interface ApiLog {
   attributes?: Record<string, string> | null
 }
 
+export interface ApiExpensiveQuery {
+  statement: string
+  summary?: string | null
+  serviceName: string
+  executions: number
+  avgMs: number
+  maxMs: number
+  totalMs: number
+  lastSeen: string
+  sampleTraceId?: string | null
+  status?: string | null
+}
+
 export interface ApiThroughputSeries {
   range: string
   windowSeconds: number

@@ -25,6 +25,7 @@ public interface ITelemetryStore
     Task<IReadOnlyList<CollectorRow>> QueryCollectorsAsync(DateTime fromUtc, CancellationToken ct);
     Task<IReadOnlyList<AlertStateRow>> GetAlertStatesAsync(CancellationToken ct);
     Task AcknowledgeAlertAsync(string alertKey, CancellationToken ct);
+    Task<IReadOnlyList<ExpensiveQueryRow>> QueryExpensiveQueriesAsync(ExpensiveQueryQuery query, CancellationToken ct);
 }
 
 public sealed class TelemetryStore : ITelemetryStore
@@ -671,6 +672,90 @@ WHEN NOT MATCHED THEN INSERT (AlertKey, Acknowledged, AcknowledgedAtUtc, Updated
             new { AlertKey = alertKey, Now = DateTime.UtcNow }, cancellationToken: ct));
     }
 
+    public async Task<IReadOnlyList<ExpensiveQueryRow>> QueryExpensiveQueriesAsync(
+        ExpensiveQueryQuery query, CancellationToken ct)
+    {
+        const string statementExpr = @"COALESCE(JSON_VALUE(s.AttributesJson, '$.""db.query.text""'),
+                     JSON_VALUE(s.AttributesJson, '$.""db.statement""'),
+                     JSON_VALUE(s.AttributesJson, '$.""db.query.summary""'))";
+
+        const string sql = @"
+;WITH Q AS (
+    SELECT s.TraceId, s.ServiceName, s.StartTimeUtc, s.DurationUs,
+           " + statementExpr + @" AS Statement,
+           JSON_VALUE(s.AttributesJson, '$.""db.query.summary""') AS Summary
+    FROM dbo.Spans s
+    WHERE s.Kind = N'Client'
+      AND s.StartTimeUtc >= @FromUtc
+      AND (@ToUtc IS NULL OR s.StartTimeUtc <= @ToUtc)
+      AND (@Service IS NULL OR s.ServiceName = @Service)
+      AND s.DurationUs >= @MinDurationUs
+      AND " + statementExpr + @" IS NOT NULL
+      AND " + statementExpr + @" NOT LIKE N'CREATE%'
+      AND " + statementExpr + @" NOT LIKE N'ALTER%'
+      AND " + statementExpr + @" NOT LIKE N'DROP%'
+      AND " + statementExpr + @" NOT LIKE N'TRUNCATE%'
+      AND " + statementExpr + @" NOT LIKE N'EXEC%'
+      AND " + statementExpr + @" NOT LIKE N'DECLARE%'
+),
+G AS (
+    SELECT Statement,
+           MAX(Summary) AS Summary,
+           ServiceName,
+           COUNT(*) AS Executions,
+           AVG(DurationUs) / 1000.0 AS AvgMs,
+           MAX(DurationUs) / 1000.0 AS MaxMs,
+           SUM(DurationUs) / 1000.0 AS TotalMs,
+           MAX(StartTimeUtc) AS LastSeenUtc,
+           COUNT(*) OVER () AS Total
+    FROM Q
+    GROUP BY Statement, ServiceName
+)
+SELECT g.Statement, g.Summary, g.ServiceName, g.Executions, g.AvgMs, g.MaxMs, g.TotalMs, g.LastSeenUtc,
+       (SELECT TOP 1 q2.TraceId FROM Q q2
+         WHERE q2.Statement = g.Statement AND q2.ServiceName = g.ServiceName
+         ORDER BY q2.StartTimeUtc DESC) AS SampleTraceId,
+       g.Total
+FROM G g
+ORDER BY {orderBy}
+OFFSET @Offset ROWS FETCH NEXT @Limit ROWS ONLY;";
+
+        var orderBy = query.Sort?.ToLowerInvariant() switch
+        {
+            "avg_ms" => "g.AvgMs DESC",
+            "executions" => "g.Executions DESC",
+            "total_ms" => "g.TotalMs DESC",
+            "last_seen" => "g.LastSeenUtc DESC",
+            _ => "g.MaxMs DESC",
+        };
+
+        var parameters = new DynamicParameters();
+        parameters.Add("FromUtc", query.FromUtc ?? DateTime.UtcNow.AddHours(-1), DbType.DateTime2);
+        parameters.Add("ToUtc", query.ToUtc, DbType.DateTime2);
+        parameters.Add("Service", query.Service);
+        parameters.Add("MinDurationUs", Math.Max(0, query.MinDurationUs));
+        parameters.Add("Offset", Math.Max(0, query.Offset));
+        parameters.Add("Limit", Math.Clamp(query.Limit, 1, 1000));
+
+        await using var connection = OpenConnection();
+        var rows = await connection.QueryAsync<ExpensiveQueryRowSql>(new CommandDefinition(
+            sql.Replace("{orderBy}", orderBy), parameters, cancellationToken: ct));
+
+        return rows.Select(r => new ExpensiveQueryRow
+        {
+            Statement = r.Statement,
+            Summary = r.Summary,
+            ServiceName = r.ServiceName,
+            Executions = r.Executions,
+            AvgMs = r.AvgMs,
+            MaxMs = r.MaxMs,
+            TotalMs = r.TotalMs,
+            LastSeenUtc = r.LastSeenUtc,
+            SampleTraceId = r.SampleTraceId,
+            Total = r.Total,
+        }).ToList();
+    }
+
     public async Task<IReadOnlyList<ServiceRow>> QueryServicesAsync(DateTime fromUtc, CancellationToken ct)
     {
         const string sql = @"
@@ -885,6 +970,20 @@ ORDER BY BucketIndex;";
         public string? TraceId { get; init; }
         public string? SpanId { get; init; }
         public string? AttributesJson { get; init; }
+        public required int Total { get; init; }
+    }
+
+    private sealed class ExpensiveQueryRowSql
+    {
+        public required string Statement { get; init; }
+        public string? Summary { get; init; }
+        public required string ServiceName { get; init; }
+        public required long Executions { get; init; }
+        public required double AvgMs { get; init; }
+        public required double MaxMs { get; init; }
+        public required double TotalMs { get; init; }
+        public required DateTime LastSeenUtc { get; init; }
+        public string? SampleTraceId { get; init; }
         public required int Total { get; init; }
     }
 }

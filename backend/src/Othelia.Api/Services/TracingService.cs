@@ -119,6 +119,38 @@ public sealed class TracingService : ITracingService
         return new LogQueryResult { Items = items, Total = rows.FirstOrDefault()?.Total ?? 0 };
     }
 
+    public async Task<ExpensiveQueryResult> GetExpensiveQueriesAsync(
+        ExpensiveQueryQuery query,
+        CancellationToken ct = default)
+    {
+        var opts = await _resolver.ResolveAsync(ct);
+        var slowMs = Math.Max(1, opts.Query.SlowThresholdMs);
+        var effectiveQuery = query with
+        {
+            FromUtc = query.FromUtc ?? DateTime.UtcNow.AddSeconds(-Math.Max(0, opts.Query.DefaultLookbackSeconds)),
+            MinDurationUs = query.MinDurationUs > 0 ? query.MinDurationUs : slowMs * 1000L,
+            Limit = Math.Clamp(query.Limit > 0 ? query.Limit : 100, 1, Math.Max(1, opts.Query.MaxTracesPerRequest)),
+        };
+
+        var rows = await _store.QueryExpensiveQueriesAsync(effectiveQuery, ct);
+
+        var items = rows.Select(r => new ExpensiveQueryDto
+        {
+            Statement = r.Statement,
+            Summary = r.Summary,
+            ServiceName = r.ServiceName,
+            Executions = r.Executions,
+            AvgMs = Math.Round(r.AvgMs, 1),
+            MaxMs = Math.Round(r.MaxMs, 1),
+            TotalMs = Math.Round(r.TotalMs, 1),
+            LastSeen = new DateTimeOffset(r.LastSeenUtc, TimeSpan.Zero),
+            SampleTraceId = r.SampleTraceId,
+            Status = r.MaxMs >= slowMs ? "slow" : "ok",
+        }).ToList();
+
+        return new ExpensiveQueryResult { Items = items, Total = rows.FirstOrDefault()?.Total ?? 0 };
+    }
+
     private static IReadOnlyDictionary<string, string>? DeserializeAttributes(string? json)
     {
         if (string.IsNullOrEmpty(json))

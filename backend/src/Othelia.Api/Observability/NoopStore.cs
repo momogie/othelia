@@ -64,4 +64,8 @@ public sealed class NoopTelemetryStore : ITelemetryStore
         => Task.FromResult<IReadOnlyList<AlertStateRow>>(Array.Empty<AlertStateRow>());
 
     public Task AcknowledgeAlertAsync(string alertKey, CancellationToken ct) => Task.CompletedTask;
+
+    public Task<IReadOnlyList<ExpensiveQueryRow>> QueryExpensiveQueriesAsync(
+        ExpensiveQueryQuery query, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<ExpensiveQueryRow>>(Array.Empty<ExpensiveQueryRow>());
 }

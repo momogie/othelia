@@ -35,6 +35,7 @@ const sections: { label: string; items: NavEntry[] }[] = [
       { to: '/traces', icon: '📡', label: 'Traces', badge: '', badgeClass: 'nb-blue' },
       { to: '/services', icon: '🕸️', label: 'Service Map' },
       { to: '/metrics', icon: '📈', label: 'Metrics' },
+      { to: '/queries', icon: '🐢', label: 'Queries' },
       { to: '/logs', icon: '📋', label: 'Logs', badge: '', badgeClass: 'nb-red' },
     ],
   },

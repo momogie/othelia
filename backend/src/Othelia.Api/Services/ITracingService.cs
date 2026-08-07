@@ -14,4 +14,8 @@ public interface ITracingService
     Task<IReadOnlyList<SpanDto>> GetSpansAsync(string traceId, CancellationToken ct = default);
 
     Task<LogQueryResult> GetLogsAsync(LogQuery query, CancellationToken ct = default);
+
+    Task<ExpensiveQueryResult> GetExpensiveQueriesAsync(
+        ExpensiveQueryQuery query,
+        CancellationToken ct = default);
 }

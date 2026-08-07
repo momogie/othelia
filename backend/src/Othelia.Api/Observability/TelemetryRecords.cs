@@ -199,3 +199,28 @@ public sealed record AlertStateRow
     public required string AlertKey { get; init; }
     public required bool Acknowledged { get; init; }
 }
+
+public sealed record ExpensiveQueryQuery
+{
+    public string? Service { get; init; }
+    public DateTime? FromUtc { get; init; }
+    public DateTime? ToUtc { get; init; }
+    public long MinDurationUs { get; init; }
+    public int Limit { get; init; } = 100;
+    public int Offset { get; init; }
+    public string? Sort { get; init; }
+}
+
+public sealed record ExpensiveQueryRow
+{
+    public required string Statement { get; init; }
+    public string? Summary { get; init; }
+    public required string ServiceName { get; init; }
+    public required long Executions { get; init; }
+    public required double AvgMs { get; init; }
+    public required double MaxMs { get; init; }
+    public required double TotalMs { get; init; }
+    public required DateTime LastSeenUtc { get; init; }
+    public string? SampleTraceId { get; init; }
+    public required int Total { get; init; }
+}
