@@ -71,6 +71,9 @@ function isDimmed(service: string): boolean {
         <span class="toc-name" style="font-size:13px">{{ activeSpan.name }}</span>
         <span class="tag" :class="activeSpan.status === 'error' ? 'tag-error' : 'tag-ok'">{{ activeSpan.status.toUpperCase() }}</span>
       </div>
+      <div v-if="activeSpan.status === 'error' && activeSpan.statusMessage" class="span-error-msg">
+        {{ activeSpan.statusMessage }}
+      </div>
       <SpanAttributes title="Span Attributes" :items="activeSpan.attrs" />
     </div>
   </template>

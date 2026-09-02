@@ -11,6 +11,7 @@ public sealed record SpanDto
     public DateTimeOffset StartTime { get; init; }
     public TimeSpan Duration { get; init; }
     public string? Status { get; init; }
+    public string? StatusMessage { get; init; }
     public IReadOnlyDictionary<string, string>? Attributes { get; init; }
     public IReadOnlyDictionary<string, string>? ResourceAttributes { get; init; }
     public IReadOnlyList<SpanEventDto>? Events { get; init; }

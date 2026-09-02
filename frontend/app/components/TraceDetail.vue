@@ -66,6 +66,13 @@ const traceLinks = computed(() => props.trace.links ?? [])
 
     <div class="detail-body">
       <template v-if="activeTab === 'waterfall'">
+        <div v-if="trace.status === 'error' && trace.errorMessage" class="error-banner">
+          <span class="error-banner-icon">⚠️</span>
+          <div class="error-banner-body">
+            <div class="error-banner-title">Error Detected</div>
+            <div class="error-banner-msg">{{ trace.errorMessage }}</div>
+          </div>
+        </div>
         <div class="trace-overview-card">
           <div class="toc-header">
             <span class="toc-name">{{ trace.rootSpan }}</span>

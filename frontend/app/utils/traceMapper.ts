@@ -94,6 +94,7 @@ export function mapTraceSummary(api: ApiTraceSummary): TraceVM {
     path: extractPath(api.name),
     statusCode: 0,
     status: api.status === 'error' ? 'error' : api.status === 'slow' ? 'slow' : 'ok',
+    errorMessage: null,
     duration: formatDuration(durMs),
     durMs,
     spans: api.spanCount,
@@ -149,6 +150,7 @@ export function buildSpanTree(apiSpans: ApiSpan[]): SpanVM[] {
         offset: Math.max(0, start - traceStart),
         durationMs: durMs,
         status: toStatus(s.status, httpCode),
+        statusMessage: s.statusMessage,
         attrs: attrsToArray(s.attributes),
         color,
         barColor,
@@ -218,6 +220,31 @@ export function collectLinks(apiSpans: ApiSpan[]): { traceId: string; spanId: st
   return links
 }
 
+function pickErrorMessage(apiSpans: ApiSpan[]): string | null {
+  const errSpans = apiSpans
+    .map((s) => ({ s, durMs: timespanToMs(s.duration) }))
+    .filter(({ s }) => s.status === 'Error')
+    .sort((a, b) => b.durMs - a.durMs)
+  for (const { s } of errSpans) {
+    if (s.statusMessage?.trim()) return s.statusMessage
+  }
+  for (const { s } of errSpans) {
+    for (const ev of s.events ?? []) {
+      if (ev.name !== 'exception') continue
+      const msg = ev.attributes?.['exception.message']?.trim()
+      if (msg) return msg
+      const type = ev.attributes?.['exception.type']?.trim()
+      if (type) return `exception: ${type}`
+    }
+  }
+  for (const { s } of errSpans) {
+    for (const [k, v] of Object.entries(s.attributes ?? {})) {
+      if (/error|exception/i.test(k) && v.trim()) return v.trim()
+    }
+  }
+  return null
+}
+
 export function enrichTrace(trace: TraceVM, apiSpans: ApiSpan[]): TraceVM {
   const spanTree = buildSpanTree(apiSpans)
   const root = apiSpans.find((s) => !s.parentSpanId) ?? apiSpans[0]
@@ -229,6 +256,7 @@ export function enrichTrace(trace: TraceVM, apiSpans: ApiSpan[]): TraceVM {
     ...trace,
     status: spanTree.some((s) => s.status === 'error') ? 'error' : trace.status,
     errorSpans: spanTree.filter((s) => s.status === 'error').length,
+    errorMessage: pickErrorMessage(apiSpans),
     serviceCount: collectServiceNodes(apiSpans).length,
     statusCode: httpCode,
     spanTree,

@@ -10,6 +10,7 @@ export interface SpanVM {
   offset: number
   durationMs: number
   status: TraceStatus
+  statusMessage?: string | null
   attrs: Attr[]
   color: string
   barColor: string
@@ -32,6 +33,7 @@ export interface TraceVM {
   path: string
   statusCode: number
   status: TraceStatus
+  errorMessage?: string | null
   duration: string
   durMs: number
   spans: number

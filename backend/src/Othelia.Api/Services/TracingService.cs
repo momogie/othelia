@@ -84,6 +84,7 @@ public sealed class TracingService : ITracingService
             StartTime = new DateTimeOffset(s.StartTimeUtc, TimeSpan.Zero),
             Duration = TimeSpan.FromMilliseconds(s.DurationUs / 1000.0),
             Status = s.StatusCode,
+            StatusMessage = s.StatusMessage,
             Attributes = DeserializeAttributes(s.AttributesJson),
             ResourceAttributes = DeserializeAttributes(s.ResourceJson),
             Events = DeserializeEvents(s.EventsJson),

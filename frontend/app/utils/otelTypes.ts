@@ -25,6 +25,7 @@ export interface ApiSpan {
   startTime: string
   duration: string
   status?: string | null
+  statusMessage?: string | null
   attributes?: Record<string, string> | null
   resourceAttributes?: Record<string, string> | null
   events?: ApiSpanEvent[] | null
